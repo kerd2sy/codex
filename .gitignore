@@ -14,7 +14,6 @@ dahab_store_*.json
 *.env
 serviceAccountKey.json
 *firebase-adminsdk*.json
-google-services.json
 *-credentials.json
 *.pem
 *.key

@@ -37,7 +37,8 @@ yarn-error.*
 .env*.local
 
 # Secrets & credentials — NEVER commit these
-google-services.json
+# Note: google-services.json is safe to commit (client-side config, no private keys)
+# The sensitive file is the Firebase Admin SDK JSON (below)
 *firebase-adminsdk*.json
 serviceAccountKey.json
 *-credentials.json

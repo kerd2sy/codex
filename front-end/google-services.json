@@ -1,0 +1,34 @@
+{
+  "project_info": {
+    "project_number": "704097706178",
+    "project_id": "tabarak-f1a94",
+    "storage_bucket": "tabarak-f1a94.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:704097706178:android:9baf592b6daff7fece1b5b",
+        "android_client_info": {
+          "package_name": "com.tabarak.pharma"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "704097706178-enll3s6vpbcu10jivqskhrnb31nudpov.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBTwn7ct4VppLa2768xZkEEYySHqZM5O-k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
