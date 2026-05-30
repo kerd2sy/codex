@@ -1,0 +1,40 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+main
+server
+
+# Build output
+/bin/
+/dist/
+
+# Secrets & credentials — NEVER commit these
+.env
+.env.*
+serviceAccountKey.json
+*firebase-adminsdk*.json
+*-credentials.json
+*.pem
+*.key
+
+# Go specific
+vendor/
+*.test
+*.prof
+go.work
+go.work.sum
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Scratch
+scratch/

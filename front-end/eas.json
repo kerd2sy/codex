@@ -1,0 +1,29 @@
+{
+  "build": {
+    "preview": {
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend.tabarak-pharma.com"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://backend.tabarak-pharma.com"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}

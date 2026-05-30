@@ -1,0 +1,66 @@
+# ============================================================
+# SECRETS — NEVER COMMIT THESE
+# ============================================================
+# Old Python back-end (not for GitHub — contains secrets)
+back-end/
+
+# Data/business files — not for GitHub
+dahab_store_*.md
+dahab_store_*.json
+*.pdf
+
+.env
+.env.*
+*.env
+serviceAccountKey.json
+*firebase-adminsdk*.json
+google-services.json
+*-credentials.json
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.mobileprovision
+
+# ============================================================
+# Go (back-end-go)
+# ============================================================
+back-end-go/*.exe
+back-end-go/main
+back-end-go/server
+back-end-go/scratch/
+back-end-go/vendor/
+*.exe
+*.out
+
+# ============================================================
+# Node / React Native / Expo (front-end)
+# ============================================================
+front-end/node_modules/
+front-end/.expo/
+front-end/dist/
+front-end/web-build/
+front-end/expo-env.d.ts
+front-end/android/
+front-end/.kotlin/
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+*.tsbuildinfo
+*.orig.*
+
+# ============================================================
+# OS / IDE
+# ============================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ============================================================
+# Misc log files
+# ============================================================
+doctor_output.txt
+ts_errors.txt
+update_log.txt
