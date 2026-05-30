@@ -13,7 +13,7 @@
     "android": {
       "package": "com.tabarak.pharma",
       "versionCode": 9,
-      "googleServicesFile": "./google-services.json",
+      "googleServicesFile": "$GOOGLE_SERVICES_JSON",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
