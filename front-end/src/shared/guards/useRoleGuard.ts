@@ -25,8 +25,7 @@ export const useRoleGuard = (allowedRole: UserRole) => {
                 if (userRole === allowedRole || userRole === 'admin') {
                     setAuthorized(true);
                 } else {
-                    if (userRole === 'admin') router.replace('/(admin)/dashboard');
-                    else if (userRole === 'gomla') router.replace('/(gomla)/dashboard');
+                    if (userRole === 'gomla') router.replace('/(gomla)/dashboard');
                     else router.replace('/(pharmacy)');
                 }
             } catch (error) {

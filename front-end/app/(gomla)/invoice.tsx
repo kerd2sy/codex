@@ -1062,6 +1062,9 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         textAlign: 'right',
     },
+    modalCloseBtn: {
+        padding: 4,
+    },
     ocrBtn: {
         flexDirection: 'row-reverse',
         justifyContent: 'center',

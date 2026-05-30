@@ -38,6 +38,10 @@ export const SyncController = {
     setStatus: (module: string, isSyncing: boolean) => {
         currentSyncStatus = { ...currentSyncStatus, [module]: isSyncing };
         syncSubscribers.forEach(s => s(currentSyncStatus));
+    },
+    resetSync: () => {
+        currentSyncStatus = { purchase: false, sales: false, return: false, cash: false };
+        syncSubscribers.forEach(s => s(currentSyncStatus));
     }
 };
 
