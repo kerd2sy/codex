@@ -4,6 +4,9 @@ import { apiFetch, API_ENDPOINTS } from '@/api/api-client';
 import { cacheManager } from '../utils/cache-manager';
 import { PharmacyVault } from '../utils/vault';
 import { usePharmacyStore } from '../store/usePharmacyStore';
+import { InvoiceRepository } from '../utils/InvoiceRepository';
+import { DatabaseManager } from '../utils/database';
+import { BackgroundSyncManager } from '../utils/BackgroundSyncManager';
 
 export type FinancialModule = 'purchases' | 'sales' | 'returns' | 'cash' | 'orders';
 
@@ -83,12 +86,21 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
                 return;
             }
 
-            // 1. Instant Cache Load
+            // 1. Instant Cache Load from SQLite or Vault
             if (pageNum === 1 && currentState.data.length === 0) {
-                const cached = await PharmacyVault.get(pharmId, module, 'list');
-                if (cached && Array.isArray(cached) && cached.length > 0) {
-                    const sanitized = cached.map(sanitizeItem);
-                    store.setListData(module, sanitized, 'replace');
+                let localData = InvoiceRepository.getAll(pharmId, module, sortAscending);
+                
+                // Fallback to Vault if SQLite is dead or empty
+                if (!localData || localData.length === 0) {
+                    const vaultData = await PharmacyVault.get<any[]>(pharmId, module as any, 'list');
+                    if (vaultData && Array.isArray(vaultData)) {
+                        localData = vaultData;
+                    }
+                }
+
+                if (localData && localData.length > 0) {
+                    const mappedLocal = localData.map(sanitizeItem);
+                    store.setListData(module, mappedLocal, 'replace');
                     const cachedSync = await PharmacyVault.get(pharmId, 'sync', module);
                     if (cachedSync) store.setListLastUpdated(module, cachedSync);
                     store.setListLoading(module, false);
@@ -97,9 +109,9 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
                 }
             }
 
-            // 2. Fetch Fresh Data
+            // 2. Fetch Fresh Data (Background Sync)
             const sortDir = sortAscending ? 'asc' : 'desc';
-            const res = await apiFetch(`${endpoint}?page=${pageNum}&limit=20&pharmacy_id=${pharmId}&sort=${sortDir}`);
+            const res = await apiFetch(`${endpoint}?page=1&limit=50000&pharmacy_id=${pharmId}&sort=${sortDir}`);
             
             if (requestTokenRef.current !== currentToken) return;
 
@@ -112,25 +124,24 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
                         const now = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
                         store.setListLastUpdated(module, now);
                         
-                        // Smart Merge: Don't just replace, merge with what we have from Vault
-                        const currentData = currentState.data;
-                        const newIds = new Set(mapped.map((i: any) => i.id));
-                        const mergedData = [...mapped, ...currentData.filter((i: any) => !newIds.has(i.id))].slice(0, 500);
+                        // Save to SQLite asynchronously (or sync, but don't block UI state on its success)
+                        InvoiceRepository.saveBatch(pharmId, module, mapped);
                         
-                        store.setListData(module, mergedData, 'replace');
+                        // Wake up sync manager to sync the details of this new batch
+                        if (['purchases', 'sales', 'returns'].includes(module)) {
+                            BackgroundSyncManager.start();
+                        }
                         
-                        // Update Persist Storage
-                        const currentVault = await PharmacyVault.get(pharmId, module, 'list') || [];
-                        const vaultIds = new Set(mapped.map((i: any) => i.id));
-                        const mergedVault = [...mapped, ...currentVault.filter((i: any) => !vaultIds.has(String(i.id)))].slice(0, 100);
-                        await PharmacyVault.set(pharmId, module, 'list', mergedVault);
+                        // Use the mapped network data directly for the UI
+                        store.setListData(module, mapped, 'replace');
+                        
+                        // Update sync timestamp
                         await PharmacyVault.set(pharmId, 'sync', module, now);
                     } else {
+                        // Pagination logic removed since we fetch all, but keeping for compatibility
                         store.setListData(module, mapped, 'append');
                     }
-                    // If we have more than 20 items total in our local store, we have "more" to show
-                    const totalLoaded = (store[module] as any).data.length;
-                    store.setListHasMore(module, (mapped.length === 20 || totalLoaded > 20) && totalLoaded < 500);
+                    store.setListHasMore(module, false);
                 }
             }
         } catch (e) {
@@ -144,15 +155,9 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
     }, [module, endpoint, sanitizeItem, store.setListData, store.setListLoading, store.setListLastUpdated, store.setListHasMore, store.setListRefreshing]);
 
     const loadMore = useCallback((sortAscending: boolean) => {
-        const currentState = stateRef.current;
-        if (!currentState.hasMore || currentState.loading) return;
-        if (currentState.data.length > (currentState.page * 20)) {
-            store.incrementPage(module);
-            return;
-        }
-        store.incrementPage(module);
-        fetchData(false, currentState.page + 1, sortAscending);
-    }, [module, fetchData, store.incrementPage]);
+        // No pagination needed anymore, as we sync all to SQLite
+        return;
+    }, []);
 
     return {
         data: state.data,

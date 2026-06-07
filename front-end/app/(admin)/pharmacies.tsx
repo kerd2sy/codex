@@ -16,30 +16,26 @@ import { Colors } from '@/core/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { apiFetch } from '@/api/api-client';
+import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
 
-const Header = ({ title, onBack, theme, searchQuery, setSearchQuery }: any) => {
+const Header = ({ title, onBack, onOpenFilter, theme }: any) => {
     const insets = useSafeAreaInsets();
     return (
-        <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.background }]}>
-            <View style={styles.headerTop}>
-                <TouchableOpacity style={[styles.backCircle, { backgroundColor: theme.card }]} onPress={onBack}>
-                    <Ionicons name="arrow-forward" size={24} color={theme.text} />
+        <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+            <View style={styles.headerRight}>
+                <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+                    <Ionicons name="chevron-forward" size={28} color={theme.primary} />
                 </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>{title}</Text>
-                <View style={{ width: 44 }} />
-            </View>
-            
-            <View style={styles.searchBarContainer}>
-                <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                    <Ionicons name="search" size={20} color={theme.muted} />
-                    <TextInput 
-                        style={[styles.searchInput, { color: theme.text }]}
-                        placeholder="بحث عن صيدلية بالاسم أو الكود..."
-                        placeholderTextColor={theme.muted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                    />
+                <View style={styles.headerTitleContainer}>
+                    <Text style={[styles.headerTitle, { color: theme.primary }]}>{title}</Text>
+                    <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
                 </View>
+            </View>
+
+            <View style={styles.headerIcons}>
+                <TouchableOpacity style={styles.headerIconBtn} onPress={onOpenFilter}>
+                   <Ionicons name="filter" size={24} color={theme.primary} />
+                </TouchableOpacity>
             </View>
         </View>
     );
@@ -200,9 +196,21 @@ export default function PharmaciesScreen() {
                 title="إدارة الصيدليات" 
                 onBack={() => router.back()} 
                 theme={theme} 
-                searchQuery={searchQuery}
-                setSearchQuery={setSearchQuery}
+                onOpenFilter={() => {}}
             />
+
+            <View style={styles.searchBarContainer}>
+                <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <Ionicons name="search" size={20} color={theme.muted} />
+                    <TextInput 
+                        style={[styles.searchInput, { color: theme.text }]}
+                        placeholder="بحث عن صيدلية بالاسم أو الكود..."
+                        placeholderTextColor={theme.muted}
+                        value={searchQuery}
+                        onChangeText={setSearchQuery}
+                    />
+                </View>
+            </View>
 
             {loading ? (
                 <View style={styles.center}>
@@ -226,11 +234,35 @@ export default function PharmaciesScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { paddingBottom: 15 },
-    headerTop: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20 },
-    backCircle: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold' },
-    searchBarContainer: { paddingHorizontal: 20, marginTop: 15 },
+    header: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
+    headerRight: { 
+        flexDirection: 'row-reverse', 
+        alignItems: 'center', 
+        gap: 12, 
+        flex: 1 
+    },
+    backBtn: { padding: 4, marginLeft: -4 },
+    headerTitleContainer: {
+        alignItems: 'flex-end',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '900',
+    },
+    titleUnderline: {
+        width: 25,
+        height: 4,
+        marginTop: -2,
+        borderRadius: 2,
+    },
+    headerIcons: { flexDirection: 'row-reverse', alignItems: 'center' },
+    headerIconBtn: { padding: 4 },
+
+    searchBarContainer: { paddingHorizontal: 20, marginTop: 10, marginBottom: 10 },
     searchBar: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 15, height: 50, borderRadius: 15, borderWidth: 1 },
     searchInput: { flex: 1, textAlign: 'right', fontSize: 14, marginRight: 10 },
     

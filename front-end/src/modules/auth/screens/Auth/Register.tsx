@@ -18,12 +18,14 @@ export const Register = () => {
 
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [loading, setLoading] = useState(false);
     
     const nameRef = useRef<any>(null);
     const emailRef = useRef<any>(null);
+    const phoneRef = useRef<any>(null);
     const passRef = useRef<any>(null);
     const confirmRef = useRef<any>(null);
     
@@ -58,7 +60,7 @@ export const Register = () => {
         try {
             const res = await apiFetch(API_ENDPOINTS.AUTH.REGISTER, {
                 method: 'POST',
-                body: JSON.stringify({ email, manager_name: name, password })
+                body: JSON.stringify({ email, manager_name: name, manager_phone: phone, password })
             });
 
             const data = await res.json();
@@ -108,6 +110,17 @@ export const Register = () => {
                     onChangeText={setEmail} 
                     autoCapitalize="none"
                     keyboardType="email-address"
+                    returnKeyType="next"
+                    onSubmitEditing={() => phoneRef.current?.focus()}
+                />
+                
+                <Input 
+                    ref={phoneRef}
+                    label="رقم الهاتف" 
+                    placeholder="010XXXXXXXX" 
+                    value={phone} 
+                    onChangeText={setPhone} 
+                    keyboardType="phone-pad"
                     returnKeyType="next"
                     onSubmitEditing={() => passRef.current?.focus()}
                 />

@@ -90,20 +90,20 @@ export const performFullSync = async (pharmacyId: string, isTurbo: boolean = fal
             if (!(await isUserLoggedIn())) return;
             SyncController.setStatus(target.syncKey, true);
 
-            await InteractionManager.runAfterInteractions(async () => {
-                const limit = isTurbo ? SYNC_CONFIG.INITIAL_LIMIT : 10;
-                const res = await apiFetch(`${target.url}?page=1&limit=${limit}&pharmacy_id=${pharmacyId}`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (Array.isArray(data)) {
-                        await PharmacyVault.set(pharmacyId, target.module as any, 'list', data);
-                        // Fast fetch first few details
-                        const detailPromises = data.slice(0, 5).map(item => fetchInvoiceDetailInBackground(pharmacyId, item.id));
-                        await Promise.all(detailPromises);
-                    }
+            await new Promise(r => InteractionManager.runAfterInteractions(() => r(null)));
+            
+            const limit = isTurbo ? SYNC_CONFIG.INITIAL_LIMIT : 10;
+            const res = await apiFetch(`${target.url}?page=1&limit=${limit}&pharmacy_id=${pharmacyId}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    await PharmacyVault.set(pharmacyId, target.module as any, 'list', data);
+                    // Fast fetch first few details
+                    const detailPromises = data.slice(0, 5).map(item => fetchInvoiceDetailInBackground(pharmacyId, item.id));
+                    await Promise.all(detailPromises);
                 }
-                SyncController.setStatus(target.syncKey, false);
-            });
+            }
+            SyncController.setStatus(target.syncKey, false);
 
             // Small breather to keep UI responsive
             await new Promise(r => setTimeout(r, isTurbo ? 50 : 200));
@@ -140,26 +140,26 @@ export const performDeepSync = async (pharmacyId: string) => {
             for (let page = 1; page <= maxPages; page++) {
                 if (!(await isUserLoggedIn())) break;
 
-                await InteractionManager.runAfterInteractions(async () => {
-                    const res = await apiFetch(`${target.url}?page=${page}&limit=20&pharmacy_id=${pharmacyId}`);
-                    if (res.ok) {
-                        const data = await res.json();
-                        if (Array.isArray(data) && data.length > 0) {
-                            const current = await PharmacyVault.get<any[]>(pharmacyId, target.module as any, 'list') || [];
-                            const newIds = new Set(data.map(i => i.id));
-                            const merged = [...data, ...current.filter(i => !newIds.has(i.id))].slice(0, SYNC_CONFIG.MAX_HISTORY);
-                            await PharmacyVault.set(pharmacyId, target.module as any, 'list', merged);
-                            
-                            // Background fetch ALL details on WiFi
-                            if (isWifi) {
-                                for (let i = 0; i < data.length; i += SYNC_CONFIG.CONCURRENT_DETAIL_FETCH) {
-                                    const batch = data.slice(i, i + SYNC_CONFIG.CONCURRENT_DETAIL_FETCH);
-                                    await Promise.all(batch.map(item => fetchInvoiceDetailInBackground(pharmacyId, item.id)));
-                                }
+                await new Promise(r => InteractionManager.runAfterInteractions(() => r(null)));
+                
+                const res = await apiFetch(`${target.url}?page=${page}&limit=20&pharmacy_id=${pharmacyId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        const current = await PharmacyVault.get<any[]>(pharmacyId, target.module as any, 'list') || [];
+                        const newIds = new Set(data.map(i => i.id));
+                        const merged = [...data, ...current.filter(i => !newIds.has(i.id))].slice(0, SYNC_CONFIG.MAX_HISTORY);
+                        await PharmacyVault.set(pharmacyId, target.module as any, 'list', merged);
+                        
+                        // Background fetch ALL details on WiFi
+                        if (isWifi) {
+                            for (let i = 0; i < data.length; i += SYNC_CONFIG.CONCURRENT_DETAIL_FETCH) {
+                                const batch = data.slice(i, i + SYNC_CONFIG.CONCURRENT_DETAIL_FETCH);
+                                await Promise.all(batch.map(item => fetchInvoiceDetailInBackground(pharmacyId, item.id)));
                             }
                         }
                     }
-                });
+                }
                 
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
@@ -179,14 +179,13 @@ const fetchInvoiceDetailInBackground = async (pharmacyId: string, invoiceId: str
         const cached = await PharmacyVault.get(pharmacyId, 'details', invoiceId);
         if (cached) return;
 
-        await InteractionManager.runAfterInteractions(async () => {
-            const res = await apiFetch(`${API_ENDPOINTS.PURCHASES.DETAIL(invoiceId)}?pharmacy_id=${pharmacyId}`);
-            if (res.ok) {
-                const data = await res.json();
-                const details = Array.isArray(data) ? (data[0] || {}) : (data.details || data);
-                let items = Array.isArray(data) ? data : (data.items || []);
-                await PharmacyVault.set(pharmacyId, 'details', invoiceId, { details, items });
-            }
-        });
+        await new Promise(r => InteractionManager.runAfterInteractions(() => r(null)));
+        const res = await apiFetch(`${API_ENDPOINTS.PURCHASES.DETAIL(invoiceId)}?pharmacy_id=${pharmacyId}`);
+        if (res.ok) {
+            const data = await res.json();
+            const details = Array.isArray(data) ? (data[0] || {}) : (data.details || data);
+            let items = Array.isArray(data) ? data : (data.items || []);
+            await PharmacyVault.set(pharmacyId, 'details', invoiceId, { details, items });
+        }
     } catch (e) {}
 };

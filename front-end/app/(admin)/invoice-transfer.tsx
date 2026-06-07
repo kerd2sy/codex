@@ -18,6 +18,7 @@ import { Colors } from '@/core/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { apiFetch } from '@/api/api-client';
+import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
 
 export default function InvoiceTransferScreen() {
     const router = useRouter();
@@ -109,13 +110,17 @@ export default function InvoiceTransferScreen() {
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: theme.card }]}>
-                    <Ionicons name="arrow-forward" size={24} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>تحويل الفواتير</Text>
-                <View style={{ width: 44 }} />
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+            <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+                <View style={styles.headerRight}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                        <Ionicons name="chevron-forward" size={28} color={theme.primary} />
+                    </TouchableOpacity>
+                    <View style={styles.headerTitleContainer}>
+                        <Text style={[styles.headerTitle, { color: theme.primary }]}>تحويل الفواتير</Text>
+                        <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
+                    </View>
+                </View>
             </View>
 
             <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
@@ -212,9 +217,31 @@ export default function InvoiceTransferScreen() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 60 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    header: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
+    headerRight: { 
+        flexDirection: 'row-reverse', 
+        alignItems: 'center', 
+        gap: 12, 
+        flex: 1 
+    },
+    backBtn: { padding: 4, marginLeft: -4 },
+    headerTitleContainer: {
+        alignItems: 'flex-end',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '900',
+    },
+    titleUnderline: {
+        width: 25,
+        height: 4,
+        marginTop: -2,
+        borderRadius: 2,
+    },
     scrollContent: { padding: 20 },
     card: { borderRadius: 20, padding: 20, borderWidth: 1 },
     label: { fontSize: 14, fontWeight: '700', marginBottom: 10, textAlign: 'right' },

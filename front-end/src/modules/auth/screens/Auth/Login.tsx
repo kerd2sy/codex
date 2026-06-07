@@ -42,8 +42,21 @@ export const Login = () => {
             if (user && token && bioEnabled !== 'true') {
                 console.log("[Login] Valid session found, redirecting to dashboard...");
                 const userData = JSON.parse(user);
-                if (userData.role === 'admin') router.replace('/(admin)/dashboard');
-                else if (userData.role === 'gomla') router.replace('/(gomla)/dashboard');
+                
+                if (!userData.roles) {
+                    console.log("[Login] Outdated session without roles. Forcing re-login.");
+                    storage.deleteItem('user');
+                    storage.deleteItem('access_token');
+                    return;
+                }
+
+                const empRole = userData.employee_role || '';
+                const userRoles = userData.roles || [];
+                const hasRole = (role: string) => userRoles.includes(role) || empRole === role;
+
+                if (hasRole('admin')) router.replace('/(admin)/dashboard');
+                else if (hasRole('gomla')) router.replace('/(gomla)/dashboard');
+                else if (hasRole('employee') || ['employee', 'reviewer', 'preparation', 'control', 'distribution'].some(hasRole)) router.replace('/(employee)/dashboard');
                 else router.replace('/(pharmacy)');
             } else if (!user || !token) {
                 console.log("[Login] No session. Auto-login check:", hasLoggedOut !== 'true');

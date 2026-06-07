@@ -17,7 +17,7 @@ export const useSecuritySettings = () => {
 
     const loadSettings = useCallback(async () => {
         try {
-            const userStr = await AsyncStorage.getItem('user');
+            const userStr = await storage.getItem('user');
             if (userStr) {
                 const userData = JSON.parse(userStr);
                 setUser(userData);

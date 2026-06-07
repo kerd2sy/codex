@@ -7,6 +7,7 @@ import {
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useRouter } from '@/hooks/useRouter';
 import { useTheme } from '@/context/ThemeContext';
+import BarcodeLottie from '../../../../ui/shared/BarcodeLottie';
 import { Colors } from '../../../../core/theme';
 import { Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
@@ -60,13 +61,7 @@ export const Search = () => {
                     </TouchableOpacity>
                 )}
                 <TouchableOpacity onPress={() => setScannerVisible(true)}>
-                    <LottieView
-                        ref={scannerRef}
-                        source={require('@/assets/json/Barcode.json')}
-                        autoPlay
-                        loop
-                        style={{ width: 40, height: 40 }}
-                    />
+                    <BarcodeLottie style={{ width: 40, height: 40 }} />
                 </TouchableOpacity>
             </View>
 

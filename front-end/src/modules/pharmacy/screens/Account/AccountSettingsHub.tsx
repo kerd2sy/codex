@@ -1,30 +1,24 @@
 import React, { useState, useCallback } from 'react';
-import { 
-  ScrollView, StyleSheet, Text, 
-  TouchableOpacity, View, Switch, Image, ActivityIndicator, Platform
-} from 'react-native';
-
+import { View, TouchableOpacity, Text } from 'react-native';
 import { useRouter } from '@/hooks/useRouter';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '@/core/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LottieView from 'lottie-react-native';
 import { useSecuritySettings } from '../../hooks/useSecuritySettings';
-import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/constants/HeaderConstants';
-import { useFocusEffect } from 'expo-router';
-import { emitForceLogout } from '@/shared/guards/auth-events';
-import { StatusModal } from '../../../../ui/shared/StatusModal';
+import { useFocusEffect, useSegments } from 'expo-router';
+import { storage } from '@/shared/utils/storage';
+import { SharedSettingsHub, SettingsMenuGroup } from '@/ui/shared/SharedSettingsHub';
+import { useProfile } from '../../hooks/useProfile';
 
 export const AccountSettingsHub = () => {
     const router = useRouter();
-    const insets = useSafeAreaInsets();
     const { colorScheme } = useTheme();
     const theme = Colors[colorScheme];
     
     const { 
         user, biometricEnabled, loadSettings, toggleBiometric 
     } = useSecuritySettings();
+    const { logout } = useProfile();
 
     const [status, setStatus] = useState<any>({ visible: false, type: 'success', title: '', message: '' });
 
@@ -36,7 +30,7 @@ export const AccountSettingsHub = () => {
         else if (res.error) setStatus({ visible: true, type: 'error', title: 'تنبيه', message: res.error });
     };
 
-    const MENU_GROUPS = [
+    const MENU_GROUPS: SettingsMenuGroup[] = [
         {
             id: 'account',
             title: 'الحساب والملف الشخصي',
@@ -59,125 +53,175 @@ export const AccountSettingsHub = () => {
                     onValueChange: onToggleBio 
                 },
                 { id: 'password', title: 'تغيير كلمة المرور', icon: 'key-outline', color: '#607D8B', route: '/(pharmacy)/profile/change-password' },
+                { id: 'backup', title: 'النسخ الاحتياطي السحابي', icon: 'cloud-upload-outline', color: '#9C27B0', route: '/(pharmacy)/backup' },
             ]
-        }
+        },
     ];
 
-    return (
-        <View style={[styles.container, { backgroundColor: theme.background }]}>
-            {/* Header Exactly like Admin */}
-            <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
-                <View style={styles.headerRight}>
-                    <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        <Ionicons name="chevron-forward" size={24} color={theme.primary} />
-                    </TouchableOpacity>
-                    <View style={styles.headerTitleContainer}>
-                        <Text style={[styles.title, { color: theme.primary }]}>إعدادات الحساب</Text>
-                        <View style={[styles.titleLine, { backgroundColor: '#FF7E47' }]} />
-                    </View>
-                </View>
-            </View>
+    const segments = useSegments();
+    const currentModule = segments[0] as string;
 
-            <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 20 }]} showsVerticalScrollIndicator={false}>
-                {MENU_GROUPS.map((group) => (
-                    <View key={group.id} style={styles.groupContainer}>
-                        <Text style={[styles.groupTitle, { color: theme.muted }]}>{group.title}</Text>
-                        <View style={[styles.menuBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                            {group.items.map((item: any, idx) => (
-                                <TouchableOpacity 
-                                    key={item.id} 
-                                    style={[styles.menuItem, idx !== group.items.length - 1 && { borderBottomWidth: 1, borderBottomColor: theme.border }]}
-                                    onPress={item.type !== 'switch' ? () => router.push(item.route as any) : undefined}
-                                    disabled={item.type === 'switch'}
-                                    activeOpacity={0.7}
-                                >
-                                    {item.type === 'switch' ? (
-                                        <Switch 
-                                            value={item.value} 
-                                            onValueChange={item.onValueChange} 
-                                            trackColor={{ false: theme.border, true: item.color + '80' }} 
-                                            thumbColor={item.value ? item.color : '#f4f3f4'} 
-                                        />
-                                    ) : (
-                                        <View style={styles.menuItemLeft}>
-                                            <Ionicons name="chevron-back" size={18} color={theme.muted} />
-                                        </View>
-                                    )}
-                                    <View style={styles.menuItemRight}>
-                                        <View style={[styles.iconBox, { backgroundColor: item.color + '10' }]}>
-                                            <Ionicons name={item.icon as any} size={20} color={item.color} />
-                                        </View>
-                                        <Text style={[styles.menuText, { color: theme.text }]}>{item.title}</Text>
-                                    </View>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-                ))}
+    const hasRole = (role: string) => {
+        if (!user) return false;
+        if (user.roles) {
+            return user.roles.some((r: any) => 
+                typeof r === 'string' ? r === role : r.name === role
+            );
+        }
+        return user.role === role;
+    };
 
+    // Check employee job title
+    const empRole = user?.employee_role || '';
+    const isGomlaWorker = empRole === 'gomla' || empRole === 'gomla_prep';
+    const isEmployee = hasRole('employee') || !!empRole;
+
+    const renderTopWidgets = () => (
+        <View>
+            {currentModule !== '(pharmacy)' && (hasRole('admin') || hasRole('pharmacist')) && (
                 <TouchableOpacity 
-                    style={[styles.logoutBtn, { backgroundColor: theme.surface, borderColor: theme.border }]} 
-                    onPress={() => emitForceLogout()}
-                    activeOpacity={0.7}
+                    style={{
+                        marginBottom: 15,
+                        backgroundColor: '#2196F315',
+                        padding: 16,
+                        borderRadius: 16,
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderWidth: 1,
+                        borderColor: '#2196F330'
+                    }}
+                    onPress={async () => {
+                        await storage.setItem('@last_guard', 'pharmacist');
+                        router.replace('/(pharmacy)' as any);
+                    }}
                 >
-                    <Ionicons name="chevron-back" size={18} color="#FF4B55" />
-                    <View style={styles.menuItemRight}>
-                        <View style={[styles.iconBox, { backgroundColor: '#FF4B5515' }]}>
-                            <Ionicons name="log-out-outline" size={20} color="#FF4B55" />
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                        <View style={{ backgroundColor: '#2196F3', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+                            <Ionicons name="medical-outline" size={20} color="#FFF" />
                         </View>
-                        <Text style={[styles.logoutText, { color: '#FF4B55' }]}>تسجيل الخروج</Text>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text }}>قسم الصيدلية</Text>
+                            <Text style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>إدارة المبيعات والعملاء</Text>
+                        </View>
                     </View>
+                    <Ionicons name="chevron-back" size={20} color="#2196F3" />
                 </TouchableOpacity>
+            )}
 
-                <View style={styles.footer}>
-                    <Text style={[styles.versionText, { color: theme.muted }]}>تبارك فارما - الإصدار 2.4.0</Text>
-                </View>
-            </ScrollView>
+            {/* كارت لوحة الجملة — يظهر لموظفي الجملة (gomla/gomla_prep) أو الأدمن */}
+            {currentModule !== '(gomla)' && (hasRole('admin') || isGomlaWorker) && (
+                <TouchableOpacity 
+                    style={{
+                        marginBottom: 15,
+                        backgroundColor: theme.primary + '15',
+                        padding: 16,
+                        borderRadius: 16,
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderWidth: 1,
+                        borderColor: theme.primary + '30'
+                    }}
+                    onPress={async () => {
+                        await storage.setItem('@last_guard', 'gomla');
+                        router.replace('/(gomla)/dashboard' as any);
+                    }}
+                >
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                        <View style={{ backgroundColor: theme.primary, width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+                            <Ionicons name="cube-outline" size={20} color="#FFF" />
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text }}>لوحة تحضير الجملة</Text>
+                            <Text style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>إدارة الفواتير والتشغيلات</Text>
+                        </View>
+                    </View>
+                    <Ionicons name="chevron-back" size={20} color={theme.primary} />
+                </TouchableOpacity>
+            )}
 
-            <StatusModal
-                visible={status.visible}
-                type={status.type}
-                title={status.title}
-                message={status.message}
-                onConfirm={() => setStatus({ ...status, visible: false })}
-            />
+            {currentModule !== '(admin)' && hasRole('admin') && (
+                <TouchableOpacity 
+                    style={{
+                        marginBottom: 25,
+                        backgroundColor: '#4CAF5015',
+                        padding: 16,
+                        borderRadius: 16,
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderWidth: 1,
+                        borderColor: '#4CAF5030'
+                    }}
+                    onPress={async () => {
+                        await storage.setItem('@last_guard', 'admin');
+                        router.replace('/(admin)/dashboard' as any);
+                    }}
+                >
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                        <View style={{ backgroundColor: '#4CAF50', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+                            <Ionicons name="shield-checkmark-outline" size={20} color="#FFF" />
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text }}>لوحة تحكم الإدارة</Text>
+                            <Text style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>إدارة النظام والتقارير</Text>
+                        </View>
+                    </View>
+                    <Ionicons name="chevron-back" size={20} color="#4CAF50" />
+                </TouchableOpacity>
+            )}
+
+            {/* كارت لوحة الموظفين — يظهر للأدمن والموظفين بكل أنواعهم */}
+            {currentModule !== '(employee)' && (hasRole('admin') || isEmployee) && (
+                <TouchableOpacity 
+                    style={{
+                        marginBottom: 25,
+                        backgroundColor: '#FF572215',
+                        padding: 16,
+                        borderRadius: 16,
+                        flexDirection: 'row-reverse',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        borderWidth: 1,
+                        borderColor: '#FF572230'
+                    }}
+                    onPress={async () => {
+                        await storage.setItem('@last_guard', 'employee');
+                        router.replace('/(employee)/dashboard' as any);
+                    }}
+                >
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                        <View style={{ backgroundColor: '#FF5722', width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' }}>
+                            <Ionicons name="people-outline" size={20} color="#FFF" />
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            <Text style={{ fontSize: 16, fontWeight: 'bold', color: theme.text }}>لوحة الموظفين</Text>
+                            <Text style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>إدارة المهام والحضور</Text>
+                        </View>
+                    </View>
+                    <Ionicons name="chevron-back" size={20} color="#FF5722" />
+                </TouchableOpacity>
+            )}
+
+
         </View>
     );
-};
 
-const styles = StyleSheet.create({
-    container: { flex: 1 },
-    header: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 24 },
-    headerRight: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12, flex: 1 },
-    headerTitleContainer: { alignItems: 'flex-end', flex: 1 },
-    title: { fontSize: 18, fontWeight: '900' },
-    titleLine: { width: 25, height: 4, borderRadius: 2, marginTop: -2 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
-    content: { padding: 20 },
-    profileBox: { 
-        padding: 24, 
-        borderRadius: 24, 
-        borderWidth: 1, 
-        alignItems: 'center', 
-        marginBottom: 30,
-        flexDirection: 'row-reverse'
-    },
-    avatarContainer: { width: 80, height: 80, borderRadius: 40, overflow: 'hidden', backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-    avatarImg: { width: '100%', height: '100%' },
-    avatarLottie: { width: 80, height: 80 },
-    profileInfo: { flex: 1, alignItems: 'flex-end', marginRight: 20 },
-    profileName: { fontSize: 20, fontWeight: '900' },
-    profileEmail: { fontSize: 13, marginTop: 4, opacity: 0.7 },
-    groupContainer: { marginBottom: 25 },
-    groupTitle: { fontSize: 13, fontWeight: '800', marginRight: 15, marginBottom: 10, textAlign: 'right' },
-    menuBox: { borderRadius: 24, borderWidth: 1, paddingHorizontal: 16 },
-    menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 18 },
-    menuItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    menuItemRight: { flexDirection: 'row-reverse', alignItems: 'center', gap: 15 },
-    iconBox: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    menuText: { fontSize: 16, fontWeight: '700' },
-    logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, borderRadius: 24, borderWidth: 1, marginTop: 10 },
-    logoutText: { fontSize: 16, fontWeight: '800' },
-    footer: { marginTop: 30, alignItems: 'center' },
-    versionText: { fontSize: 12, fontWeight: '700', opacity: 0.4 }
-});
+    return (
+        <SharedSettingsHub 
+            headerTitle="إعدادات الحساب"
+            headerAccentColor="#FF7E47"
+            user={user}
+            menuGroups={MENU_GROUPS}
+            versionText="تبارك فارما - الإصدار 2.4.0"
+            renderTopWidgets={renderTopWidgets}
+            showProfileCard={false}
+            statusModal={{
+                ...status,
+                onClose: () => setStatus({ ...status, visible: false })
+            }}
+            onLogout={logout}
+        />
+    );
+};

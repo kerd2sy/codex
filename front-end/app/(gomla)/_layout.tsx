@@ -32,6 +32,7 @@ export default function GomlaLayout() {
         >
             <Stack.Screen name="dashboard" />
             <Stack.Screen name="invoice" />
+            <Stack.Screen name="settings" />
         </Stack>
     );
 }

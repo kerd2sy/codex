@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-    View, Text, StyleSheet, TextInput, TouchableOpacity, 
-    FlatList, ActivityIndicator, Alert, Modal, ScrollView,
-    Image, PanResponder, Dimensions
+	View, Text, StyleSheet, TextInput, TouchableOpacity, 
+	FlatList, ActivityIndicator, Alert, Modal, ScrollView,
+	Image, PanResponder, Dimensions, KeyboardAvoidingView, Platform, RefreshControl
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -13,13 +13,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Colors } from '../../src/core/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { BarcodeScannerModal } from '../../src/modules/gomla/components/BarcodeScannerModal';
-import { performOcr } from '../../src/modules/gomla/utils/ocrParser';
+import { performOcr, uploadToRoboflow } from '../../src/modules/gomla/utils/ocrParser';
+import * as FileSystem from 'expo-file-system';
 import { 
     fetchGomlaInvoice, 
     updateGomlaInvoiceItem, 
+    saveGomlaInvoiceCache,
+    fetchProductBatchHistory,
+    updateInvoiceAuditStatus,
     GomlaInvoiceDetails, 
     GomlaInvoiceItem 
 } from '../../src/modules/gomla/services/gomlaService';
+import { addToSyncQueue, processSyncQueue, getFailedQueueItems } from '../../src/modules/gomla/services/syncManager';
 
 const parseShorthandDate = (input: string): string => {
     const clean = input.trim();
@@ -50,16 +55,41 @@ const parseShorthandDate = (input: string): string => {
     return `${yearStr}-${monthStr}-${dayStr}`;
 };
 
+export const isValidBatch = (b?: string) => {
+    if (!b) return false;
+    const clean = b.trim();
+    return clean.length > 0 && 
+           clean !== '0' && 
+           clean !== '.' && 
+           clean.toUpperCase() !== 'ASDFGH' &&
+           clean.toUpperCase() !== 'NULL';
+};
+
+export const isValidExpiry = (e?: string) => {
+    if (!e) return false;
+    const clean = e.trim();
+    return clean.length > 0 && 
+           !clean.startsWith('1899') && 
+           !clean.startsWith('2013-12-12') && 
+           !clean.startsWith('2015-01-01') && 
+           clean !== '0';
+};
+
+
 export default function GomlaInvoiceDetailsScreen() {
     const { colorScheme } = useTheme();
     const theme = Colors[colorScheme];
     const isDark = colorScheme === 'dark';
     const router = useRouter();
+    const insets = useSafeAreaInsets();
     const { id } = useLocalSearchParams<{ id: string }>();
 
     const [loading, setLoading] = useState(true);
     const [invoice, setInvoice] = useState<GomlaInvoiceDetails | null>(null);
     const [activeTab, setActiveTab] = useState<'pending' | 'audited'>('pending');
+    
+    const [refreshing, setRefreshing] = useState(false);
+    const [failedItems, setFailedItems] = useState<string[]>([]);
 
     const [scannerVisible, setScannerVisible] = useState(false);
     const [editModalVisible, setEditModalVisible] = useState(false);
@@ -67,9 +97,14 @@ export default function GomlaInvoiceDetailsScreen() {
     const [batchInput, setBatchInput] = useState('');
     const [expiryInput, setExpiryInput] = useState('');
     const [qtyInput, setQtyInput] = useState('');
+    const [isQtyEditable, setIsQtyEditable] = useState(false);
     const [saving, setSaving] = useState(false);
     const [ocrLoading, setOcrLoading] = useState(false);
     const [infoModalVisible, setInfoModalVisible] = useState(false);
+    const [isBatchNumeric, setIsBatchNumeric] = useState(true);
+    const [suggestedHistory, setSuggestedHistory] = useState<{batch: string, expiry: string} | null>(null);
+    const expiryInputRef = useRef<TextInput>(null);
+    const batchInputRef = useRef<TextInput>(null);
 
     // Highlight Crop Flow State
     const [cropModalVisible, setCropModalVisible] = useState(false);
@@ -78,6 +113,10 @@ export default function GomlaInvoiceDetailsScreen() {
     const [rawImageWidth, setRawImageWidth] = useState(0);
     const [rawImageHeight, setRawImageHeight] = useState(0);
     const [cropLoading, setCropLoading] = useState(false);
+    
+    // Manual Cropping state for Roboflow Active Learning
+    const [manualBatchBox, setManualBatchBox] = useState<any>(null);
+    const [manualExpiryBox, setManualExpiryBox] = useState<any>(null);
 
     // Crop box coordinates relative to screen layout
     const [boxX, setBoxX] = useState(80);
@@ -142,31 +181,92 @@ export default function GomlaInvoiceDetailsScreen() {
         })
     ).current;
 
-    const loadInvoiceDetails = async () => {
+    const loadInvoiceDetails = async (showLoader = true) => {
         if (!id) return;
-        setLoading(true);
+        if (showLoader) setLoading(true);
         try {
-            const data = await fetchGomlaInvoice(id);
+            const data = await fetchGomlaInvoice(id as string);
+
+            // Merge with pending offline sync queue to prevent UI flickering on refresh
+            try {
+                const queueStr = await AsyncStorage.getItem('@gomla_offline_sync_queue');
+                if (queueStr) {
+                    const queue = JSON.parse(queueStr);
+                    if (Array.isArray(queue) && queue.length > 0) {
+                        data.items = data.items.map(item => {
+                            const syncTask = queue.find(t => t.itemId === item.id);
+                            if (syncTask) {
+                                return {
+                                    ...item,
+                                    batch: syncTask.batch,
+                                    expire_date: syncTask.expiry,
+                                    qty: syncTask.qty || item.qty
+                                };
+                            }
+                            return item;
+                        });
+                    }
+                }
+            } catch (e) {
+                console.error("Error merging sync queue:", e);
+            }
+
             setInvoice(data);
+            
+            // Fetch failed queue to highlight rejected items
+            const failed = await getFailedQueueItems();
+            setFailedItems(failed);
         } catch (error) {
             console.error("[Invoice Details] Fetch Error:", error);
             Alert.alert("خطأ في التحميل", "تعذر جلب تفاصيل الفاتورة.");
             router.back();
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
         }
     };
 
+    const onRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        await loadInvoiceDetails(false);
+        setRefreshing(false);
+    }, [id]);
+
     useEffect(() => {
         loadInvoiceDetails();
+        if (id) {
+            updateInvoiceAuditStatus(id as string, 'editing');
+        }
+        return () => {
+            if (id) {
+                updateInvoiceAuditStatus(id as string, 'clear');
+            }
+        };
     }, [id]);
+
+    useEffect(() => {
+        if (invoice && invoice.items && invoice.items.length > 0 && id) {
+            const isValidBatch = (b: string) => b && b.trim() !== '' && b.trim() !== '0';
+            const isValidExpiry = (e: string) => e && e.trim() !== '' && e.trim() !== '0';
+            const pending = invoice.items.filter(item => !isValidBatch(item.batch) || !isValidExpiry(item.expire_date));
+            if (pending.length === 0) {
+                updateInvoiceAuditStatus(id as string, 'audited');
+            }
+        }
+    }, [invoice, id]);
 
     const handleScan = (barcode: string) => {
         setScannerVisible(false);
         if (!invoice) return;
 
+        const cleanScanned = barcode.replace(/\D/g, '').replace(/^0+/, '');
+        const exactScanned = barcode.trim();
+
         // Find item by barcode or prod_id
-        const item = invoice.items.find(i => i.barcode === barcode || i.prod_id === barcode);
+        const item = invoice.items.find(i => {
+            const itemBarcode = i.barcode ? i.barcode.replace(/\D/g, '').replace(/^0+/, '') : '';
+            return (itemBarcode && itemBarcode === cleanScanned) || 
+                   (i.prod_id && i.prod_id.trim() === exactScanned);
+        });
 
         if (item) {
             openEditModal(item);
@@ -175,12 +275,22 @@ export default function GomlaInvoiceDetailsScreen() {
         }
     };
 
-    const openEditModal = (item: GomlaInvoiceItem) => {
+    const openEditModal = async (item: GomlaInvoiceItem) => {
         setSelectedItem(item);
         setBatchInput('');
         setExpiryInput('');
         setQtyInput(item.qty.toString());
+        setIsQtyEditable(false);
+        setIsBatchNumeric(true);
+        setSuggestedHistory(null);
         setEditModalVisible(true);
+
+        if (!item.batch) {
+            const history = await fetchProductBatchHistory(item.prod_id);
+            if (history) {
+                setSuggestedHistory(history);
+            }
+        }
     };
 
     const launchHighlightFlow = (imageUri: string) => {
@@ -189,6 +299,8 @@ export default function GomlaInvoiceDetailsScreen() {
             setRawImageHeight(height);
             setCropImageUri(imageUri);
             setCropStep('batch');
+            setManualBatchBox(null);
+            setManualExpiryBox(null);
             setBoxX(80);
             setBoxY(120);
             setBoxW(160);
@@ -213,6 +325,15 @@ export default function GomlaInvoiceDetailsScreen() {
             const width = Math.min(rawImageWidth - originX, Math.round(boxW * scaleX));
             const height = Math.min(rawImageHeight - originY, Math.round(boxH * scaleY));
 
+            const currentBox = {
+                x: originX + width / 2,
+                y: originY + height / 2,
+                width: width,
+                height: height,
+                class: cropStep === 'batch' ? 'Batch' : 'Expiry',
+                confidence: 1
+            };
+
             const manipResult = await ImageManipulator.manipulateAsync(
                 cropImageUri,
                 [{ crop: { originX, originY, width, height } }],
@@ -224,6 +345,7 @@ export default function GomlaInvoiceDetailsScreen() {
             if (cropStep === 'batch') {
                 if (ocrResult.batch) {
                     setBatchInput(ocrResult.batch);
+                    setManualBatchBox(currentBox);
                     Alert.alert("تم القراءة", `تم العثور على التشغيلة: ${ocrResult.batch}\nالآن يرجى تحديد تاريخ الصلاحية والضغط على تأكيد.`);
                     setCropStep('expiry');
                     setBoxX(80);
@@ -236,8 +358,19 @@ export default function GomlaInvoiceDetailsScreen() {
             } else {
                 if (ocrResult.expiry) {
                     setExpiryInput(ocrResult.expiry);
+                    setManualExpiryBox(currentBox);
                     Alert.alert("تم القراءة", `تم العثور على التاريخ: ${ocrResult.expiry}`);
                     setCropModalVisible(false);
+                    
+                    // Trigger Roboflow Active Learning Upload in background!
+                    try {
+                        const base64Data = await FileSystem.readAsStringAsync(cropImageUri, { encoding: 'base64' as any });
+                        uploadToRoboflow(base64Data, manualBatchBox, currentBox);
+                        // Show a small success toast or message
+                        console.log("[Roboflow] Active learning upload triggered.");
+                    } catch (fsError) {
+                        console.error("[Roboflow] Failed to read image for upload:", fsError);
+                    }
                 } else {
                     Alert.alert("تنبيه", "تعذر قراءة التاريخ من المنطقة المحددة، يرجى المحاولة وضبط المربع بدقة.");
                 }
@@ -270,7 +403,14 @@ export default function GomlaInvoiceDetailsScreen() {
             const imageUri = result.assets[0].uri;
             setOcrLoading(true);
 
-            const ocrResult = await performOcr(imageUri);
+            // Compress image to avoid OCR.space E202 (File too large) error
+            const manipResult = await ImageManipulator.manipulateAsync(
+                imageUri,
+                [{ resize: { width: 800 } }], 
+                { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+            );
+
+            const ocrResult = await performOcr(manipResult.uri, 'none', manipResult.base64);
             
             if (ocrResult.batch) {
                 setBatchInput(ocrResult.batch);
@@ -298,11 +438,14 @@ export default function GomlaInvoiceDetailsScreen() {
         }
     };
 
-    const handleSaveItem = async () => {
+    const handleSaveItem = async (overrideBatch?: string | any, overrideExpiry?: string) => {
         if (!selectedItem) return;
 
-        const finalBatch = batchInput.trim() || selectedItem.batch || '';
-        const rawExpiry = expiryInput.trim() || selectedItem.expire_date || '';
+        const bInput = typeof overrideBatch === 'string' ? overrideBatch : batchInput.trim();
+        const eInput = typeof overrideExpiry === 'string' ? overrideExpiry : expiryInput.trim();
+
+        const finalBatch = bInput || selectedItem.batch || selectedItem.suggested_batch || '';
+        const rawExpiry = eInput || selectedItem.expire_date || selectedItem.suggested_expiry || '';
         const rawQty = qtyInput.trim();
 
         if (!finalBatch || !rawExpiry || !rawQty) {
@@ -331,11 +474,33 @@ export default function GomlaInvoiceDetailsScreen() {
 
         setSaving(true);
         try {
-            await updateGomlaInvoiceItem(selectedItem.id, finalBatch, formattedExpiry, parsedQty);
-            Alert.alert("نجاح", "تم تحديث بيانات الصنف بنجاح في الفاتورة");
             setEditModalVisible(false);
             
-            // Re-render recent invoices lists inside dashboard.tsx indirectly by saving timestamp
+            // 1. Optimistic UI Update & Cache
+            if (invoice) {
+                const updatedItems = invoice.items.map(item => {
+                    if (item.id === selectedItem.id) {
+                        return {
+                            ...item,
+                            batch: finalBatch,
+                            expire_date: formattedExpiry,
+                            qty: parsedQty
+                        };
+                    }
+                    return item;
+                });
+                const updatedInvoice = {...invoice, items: updatedItems};
+                setInvoice(updatedInvoice);
+                await saveGomlaInvoiceCache(invoice.id, updatedInvoice);
+            }
+            
+            // Remove from failed items locally to clear the red border
+            setFailedItems(prev => prev.filter(fid => fid !== selectedItem.id));
+
+            // 2. Add to offline sync queue
+            await addToSyncQueue(selectedItem.id, selectedItem.prod_id, finalBatch, formattedExpiry, parsedQty);
+
+            // 3. Update dashboard timestamp
             if (invoice) {
                 const recentJson = await AsyncStorage.getItem('@recent_gomla_invoices');
                 if (recentJson) {
@@ -352,22 +517,34 @@ export default function GomlaInvoiceDetailsScreen() {
                 }
             }
 
-            loadInvoiceDetails();
+            // 4. Attempt immediate background sync
+            processSyncQueue();
         } catch (error) {
-            Alert.alert("خطأ", "تعذر تحديث الصنف");
+            console.error("Save item error:", error);
+            Alert.alert("خطأ", "حدث خطأ غير متوقع أثناء الحفظ محلياً");
         } finally {
             setSaving(false);
         }
     };
 
-    const renderItem = ({ item }: { item: GomlaInvoiceItem }) => (
+    const renderItem = ({ item }: { item: GomlaInvoiceItem }) => {
+        const isFailed = failedItems.includes(item.id);
+        
+        return (
         <TouchableOpacity 
-            style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}
+            style={[styles.card, { backgroundColor: theme.surface, borderColor: isFailed ? '#D32F2F' : theme.border, borderWidth: isFailed ? 2 : 1 }]}
             onPress={() => openEditModal(item)}
             activeOpacity={0.7}
         >
             <View style={styles.cardHeader}>
-                <Text style={[styles.itemName, { color: theme.text }]}>{item.name}</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', flex: 1, gap: 8 }}>
+                    <Text style={[styles.itemName, { color: theme.text, flex: 1 }]}>{item.name}</Text>
+                    {isFailed && (
+                        <View style={{ backgroundColor: '#D32F2F', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                            <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>مرفوض</Text>
+                        </View>
+                    )}
+                </View>
                 <View style={[styles.badge, { backgroundColor: theme.accent + '15' }]}>
                     <Text style={[styles.badgeText, { color: theme.accent }]}>كود: {item.prod_id}</Text>
                 </View>
@@ -385,52 +562,96 @@ export default function GomlaInvoiceDetailsScreen() {
                     <Text style={[styles.detailValue, { color: theme.text }]}>{item.price} ج.م</Text>
                 </View>
             </View>
+            
+            {item.location ? (
+                <View style={{ 
+                    flexDirection: 'row-reverse', 
+                    alignItems: 'center', 
+                    backgroundColor: theme.primary + '15', 
+                    padding: 10, 
+                    borderRadius: 8, 
+                    marginTop: 8, 
+                    borderWidth: 1, 
+                    borderColor: theme.primary + '40'
+                }}>
+                    <Ionicons name="location" size={20} color={theme.primary} />
+                    <Text style={{ fontSize: 14, color: theme.text, marginRight: 6, fontWeight: '600' }}>الموقع:</Text>
+                    <Text style={{ fontSize: 16, color: theme.primary, fontWeight: '900', marginRight: 8 }}>{item.location}</Text>
+                </View>
+            ) : null}
+
+            {activeTab === 'audited' && item.audited_by_name ? (
+                <View style={{ 
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)', 
+                    padding: 8, 
+                    borderRadius: 8, 
+                    marginTop: 8, 
+                    borderWidth: 1, 
+                    borderColor: 'rgba(76, 175, 80, 0.4)'
+                }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center' }}>
+                        <Ionicons name="person-circle-outline" size={18} color="#4CAF50" />
+                        <Text style={{ fontSize: 13, color: theme.text, marginRight: 6 }}>تم تحضير الصنف بواسطة:</Text>
+                        <Text style={{ fontSize: 14, color: '#4CAF50', fontWeight: 'bold', marginRight: 4 }}>{item.audited_by_name}</Text>
+                    </View>
+                    {(item.modified_by_name && item.modified_by_name !== item.audited_by_name) ? (
+                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginTop: 4 }}>
+                            <Ionicons name="create-outline" size={16} color="#FF9800" />
+                            <Text style={{ fontSize: 12, color: theme.text, marginRight: 6 }}>تم التعديل بواسطة:</Text>
+                            <Text style={{ fontSize: 13, color: '#FF9800', fontWeight: 'bold', marginRight: 4 }}>{item.modified_by_name}</Text>
+                        </View>
+                    ) : null}
+                </View>
+            ) : null}
 
             <View style={styles.divider} />
 
             <View style={styles.cardValuesRow}>
                 <View style={[styles.valueBox, { 
-                    backgroundColor: item.batch ? (isDark ? '#2E1E12' : '#FFF3E0') : (isDark ? '#1C1C1C' : '#F5F5F5'), 
-                    borderColor: item.batch ? '#FFB74D' : '#E0E0E0',
-                    borderStyle: item.batch ? 'solid' : 'dashed'
+                    backgroundColor: isValidBatch(item.batch) ? (isDark ? '#2E1E12' : '#FFF3E0') : (isDark ? '#1C1C1C' : '#F5F5F5'), 
+                    borderColor: isValidBatch(item.batch) ? '#FFB74D' : '#E0E0E0',
+                    borderStyle: isValidBatch(item.batch) ? 'solid' : 'dashed'
                 }]}>
-                    <Text style={[styles.valueBoxLabel, { color: item.batch ? '#E65100' : '#757575' }]}>رقم التشغيلة (Batch)</Text>
-                    <Text style={[styles.valueBoxValue, { color: item.batch ? (isDark ? '#FFCC80' : '#E65100') : '#9E9E9E', fontSize: 14 }]}>
-                        {item.batch || 'معلق'}
+                    <Text style={[styles.valueBoxLabel, { color: isValidBatch(item.batch) ? '#E65100' : '#757575' }]}>رقم التشغيلة (Batch)</Text>
+                    <Text style={[styles.valueBoxValue, { color: isValidBatch(item.batch) ? (isDark ? '#FFCC80' : '#E65100') : '#9E9E9E', fontSize: 14 }]}>
+                        {isValidBatch(item.batch) ? item.batch : 'معلق'}
                     </Text>
                 </View>
                 <View style={[styles.valueBox, { 
-                    backgroundColor: item.expire_date ? (isDark ? '#1C2E24' : '#E8F5E9') : (isDark ? '#1C1C1C' : '#F5F5F5'), 
-                    borderColor: item.expire_date ? '#81C784' : '#E0E0E0',
-                    borderStyle: item.expire_date ? 'solid' : 'dashed'
+                    backgroundColor: isValidExpiry(item.expire_date) ? (isDark ? '#1C2E24' : '#E8F5E9') : (isDark ? '#1C1C1C' : '#F5F5F5'), 
+                    borderColor: isValidExpiry(item.expire_date) ? '#81C784' : '#E0E0E0',
+                    borderStyle: isValidExpiry(item.expire_date) ? 'solid' : 'dashed'
                 }]}>
-                    <Text style={[styles.valueBoxLabel, { color: item.expire_date ? '#2E7D32' : '#757575' }]}>تاريخ الصلاحية (Expiry)</Text>
-                    <Text style={[styles.valueBoxValue, { color: item.expire_date ? (isDark ? '#A5D6A7' : '#2E7D32') : '#9E9E9E', fontSize: 14 }]}>
-                        {item.expire_date || 'معلق'}
+                    <Text style={[styles.valueBoxLabel, { color: isValidExpiry(item.expire_date) ? '#2E7D32' : '#757575' }]}>تاريخ الصلاحية (Expiry)</Text>
+                    <Text style={[styles.valueBoxValue, { color: isValidExpiry(item.expire_date) ? (isDark ? '#A5D6A7' : '#2E7D32') : '#9E9E9E', fontSize: 14 }]}>
+                        {isValidExpiry(item.expire_date) ? item.expire_date : 'معلق'}
                     </Text>
                 </View>
             </View>
         </TouchableOpacity>
-    );
+        );
+    };
 
     if (loading) {
         return (
-            <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
                 <View style={styles.loaderContainer}>
                     <ActivityIndicator size="large" color={theme.primary} />
                     <Text style={[styles.loaderText, { color: theme.muted }]}>جارٍ جلب تفاصيل الفاتورة...</Text>
                 </View>
-            </SafeAreaView>
+            </View>
         );
     }
 
     if (!invoice) return null;
 
-    const pendingItems = invoice.items.filter(item => !item.batch);
-    const auditedItems = invoice.items.filter(item => !!item.batch);
+    const isAudited = (item: GomlaInvoiceItem) => isValidBatch(item.batch) && isValidExpiry(item.expire_date);
+
+    const pendingItems = invoice.items.filter(item => !isAudited(item));
+    const auditedItems = invoice.items.filter(item => isAudited(item));
 
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
             <View style={{ flex: 1 }}>
                 {/* Premium Pharmacist-Style Custom Header for Items View */}
                 <View style={[
@@ -438,7 +659,9 @@ export default function GomlaInvoiceDetailsScreen() {
                     { 
                         backgroundColor: theme.surface,
                         borderBottomWidth: 1,
-                        borderBottomColor: theme.border + '20'
+                        borderBottomColor: theme.border + '20',
+                        paddingTop: insets.top,
+                        height: 52 + insets.top,
                     }
                 ]}>
                     <View style={styles.headerRightSide}>
@@ -479,7 +702,7 @@ export default function GomlaInvoiceDetailsScreen() {
                             { color: activeTab === 'pending' ? theme.primary : theme.muted },
                             activeTab === 'pending' && { fontWeight: 'bold' }
                         ]}>
-                            أصناف لم تجرد ({pendingItems.length})
+                            أصناف لم تحضر ({pendingItems.length})
                         </Text>
                     </TouchableOpacity>
                     
@@ -496,7 +719,7 @@ export default function GomlaInvoiceDetailsScreen() {
                             { color: activeTab === 'audited' ? theme.primary : theme.muted },
                             activeTab === 'audited' && { fontWeight: 'bold' }
                         ]}>
-                            أصناف تم جردها ({auditedItems.length})
+                            أصناف تم تحضيرها ({auditedItems.length})
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -507,6 +730,9 @@ export default function GomlaInvoiceDetailsScreen() {
                     renderItem={renderItem}
                     contentContainerStyle={styles.listContainer}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />
+                    }
                     ListEmptyComponent={() => (
                         <View style={styles.emptyListContainer}>
                             <Ionicons 
@@ -516,12 +742,12 @@ export default function GomlaInvoiceDetailsScreen() {
                                 style={{ marginBottom: 12 }} 
                             />
                             <Text style={[styles.emptyListTitle, { color: theme.text }]}>
-                                {activeTab === 'pending' ? "تم الانتهاء!" : "لا يوجد جرد"}
+                                {activeTab === 'pending' ? "تم الانتهاء!" : "لا يوجد تحضير"}
                             </Text>
                             <Text style={[styles.emptyListSubtitle, { color: theme.muted }]}>
                                 {activeTab === 'pending' 
-                                    ? "تهانينا! تم جرد جميع أصناف هذه الفاتورة بنجاح." 
-                                    : "لم يتم جرد أي أصناف في هذه الفاتورة حتى الآن."
+                                    ? "تهانينا! تم تحضير جميع أصناف هذه الفاتورة بنجاح." 
+                                    : "لم يتم تحضير أي أصناف في هذه الفاتورة حتى الآن."
                                 }
                             </Text>
                         </View>
@@ -546,94 +772,167 @@ export default function GomlaInvoiceDetailsScreen() {
                 visible={scannerVisible} 
                 onClose={() => setScannerVisible(false)} 
                 onScan={handleScan} 
+                hintText="قم بتوجيه الكاميرا إلى باركود الصنف"
             />
 
             {/* Edit Item Modal */}
-            <Modal visible={editModalVisible} transparent animationType="slide">
-                <View style={styles.modalOverlay}>
-                    <View style={[styles.modalContent, { backgroundColor: theme.surface }]}>
-                        <View style={styles.bottomSheetHandle} />
-                        
-                        <View style={styles.modalHeader}>
-                            <Text style={[styles.modalTitle, { color: theme.text, flex: 1, textAlign: 'right', fontSize: 18 }]} numberOfLines={2}>
-                                {selectedItem ? selectedItem.name : ''}
-                            </Text>
-                        </View>
+            <Modal 
+                visible={editModalVisible} 
+                transparent 
+                animationType="slide"
+                onShow={() => setTimeout(() => batchInputRef.current?.focus(), 100)}
+            >
+                <KeyboardAvoidingView 
+                    style={styles.modalOverlay}
+                    behavior="padding"
+                >
+                    <TouchableOpacity 
+                        style={StyleSheet.absoluteFill} 
+                        activeOpacity={1} 
+                        onPress={() => setEditModalVisible(false)} 
+                    />
+                    <View style={[styles.modalContent, { backgroundColor: theme.surface, paddingBottom: 16 }]}>
+                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                            <View style={styles.bottomSheetHandle} />
+                            
+                            <View style={styles.modalHeader}>
+                                <Text style={[styles.modalTitle, { color: theme.text, flex: 1, textAlign: 'right', fontSize: 18 }]} numberOfLines={2}>
+                                    {selectedItem ? selectedItem.name : ''}
+                                </Text>
+                            </View>
 
-                        <TouchableOpacity 
-                            style={[styles.ocrBtn, { borderColor: theme.accent, backgroundColor: theme.accent + '08' }]}
-                            onPress={handleCameraOcr}
-                            disabled={saving || ocrLoading}
-                            activeOpacity={0.7}
-                        >
-                            {ocrLoading ? (
-                                <ActivityIndicator size="small" color={theme.accent} />
-                            ) : (
-                                <>
-                                    <Ionicons name="camera-outline" size={22} color={theme.accent} style={{ marginLeft: 8 }} />
-                                    <Text style={[styles.ocrBtnText, { color: theme.accent }]}>تصوير العلبة وقراءة البيانات بالذكاء الاصطناعي</Text>
-                                </>
+                            {suggestedHistory && !batchInput && !expiryInput && (
+                                <TouchableOpacity 
+                                    style={{
+                                        backgroundColor: theme.primary + '10',
+                                        borderRadius: 8,
+                                        paddingVertical: 10,
+                                        paddingHorizontal: 12,
+                                        marginTop: 16,
+                                        marginBottom: 4,
+                                        flexDirection: 'row-reverse',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: 8
+                                    }}
+                                    onPress={() => {
+                                        setBatchInput(suggestedHistory.batch);
+                                        setExpiryInput(suggestedHistory.expiry);
+                                        handleSaveItem(suggestedHistory.batch, suggestedHistory.expiry);
+                                    }}
+                                    activeOpacity={0.7}
+                                >
+                                    <Ionicons name="sparkles" size={16} color={theme.primary} />
+                                    <Text style={{ color: theme.primary, fontWeight: '800', fontSize: 13 }}>
+                                        تعبئة تلقائية:
+                                    </Text>
+                                    <Text style={{ color: theme.text, fontSize: 13, fontWeight: '800' }}>
+                                        <Text style={{ color: theme.muted, fontWeight: '600', fontSize: 12 }}>تشغيلة: </Text>
+                                        {suggestedHistory.batch}  •  
+                                        <Text style={{ color: theme.muted, fontWeight: '600', fontSize: 12 }}> تاريخ: </Text>
+                                        {suggestedHistory.expiry}
+                                    </Text>
+                                </TouchableOpacity>
                             )}
-                        </TouchableOpacity>
 
-                        <Text style={[styles.ocrHelpText, { color: theme.muted }]}>
-                            💡 نصيحة: يمكنك تصوير الجزء الذي يحتوي على رقم التشغيلة (Batch) وتاريخ الصلاحية (Expiry) على علبة الدواء وسيقوم نظامنا بقراءتها آلياً لتوفير الوقت!
-                        </Text>
-                        
-                        <Text style={[styles.label, { color: theme.text }]}>الكمية المراد جردها بهذه التشغيلة:</Text>
-                        <TextInput
-                            style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                            value={qtyInput}
-                            onChangeText={setQtyInput}
-                            placeholder={selectedItem ? selectedItem.qty.toString() : ""}
-                            placeholderTextColor={theme.placeholder}
-                            keyboardType="numeric"
-                        />
+                            <View style={{ 
+                                marginTop: (suggestedHistory && !batchInput && !expiryInput) ? 8 : 16, 
+                                backgroundColor: theme.primary + '15', 
+                                padding: 16, 
+                                borderRadius: 12, 
+                                borderWidth: 2, 
+                                borderColor: theme.primary + '50',
+                                flexDirection: 'row-reverse',
+                                alignItems: 'center',
+                                justifyContent: 'flex-start',
+                                gap: 12
+                            }}>
+                                <View style={{ backgroundColor: theme.primary, width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' }}>
+                                    <Ionicons name="cube-outline" size={20} color="#FFF" />
+                                </View>
+                                <Text style={{ color: theme.text, fontSize: 18, fontWeight: 'bold' }}>الكمية المطلوبة:</Text>
+                                <Text style={{ color: theme.primary, fontSize: 28, fontWeight: '900' }}>
+                                    {selectedItem ? selectedItem.qty.toString() : ""}
+                                </Text>
+                            </View>
 
-                        <Text style={[styles.label, { color: theme.text }]}>اكتب تشغيلة الصنف:</Text>
-                        <TextInput
-                            style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                            value={batchInput}
-                            onChangeText={setBatchInput}
-                            placeholder={selectedItem ? (selectedItem.batch || "مثال: ASDFGH") : "مثال: ASDFGH"}
-                            placeholderTextColor={theme.placeholder}
-                            autoCapitalize="characters"
-                        />
-
-                        <Text style={[styles.label, { color: theme.text }]}>اكتب تاريخ الصنف:</Text>
-                        <TextInput
-                            style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border }]}
-                            value={expiryInput}
-                            onChangeText={setExpiryInput}
-                            placeholder={selectedItem ? (selectedItem.expire_date || "مثال: 529") : "مثال: 529"}
-                            placeholderTextColor={theme.placeholder}
-                            keyboardType="numeric"
-                        />
-
-                        <View style={styles.modalActions}>
                             <TouchableOpacity 
-                                style={[styles.modalBtn, { backgroundColor: theme.border }]}
-                                onPress={() => setEditModalVisible(false)}
-                                disabled={saving || ocrLoading}
+                                style={{
+                                    backgroundColor: theme.accent,
+                                    borderRadius: 8,
+                                    paddingVertical: 12,
+                                    paddingHorizontal: 16,
+                                    marginTop: 16,
+                                    flexDirection: 'row-reverse',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    shadowColor: theme.accent,
+                                    shadowOffset: { width: 0, height: 2 },
+                                    shadowOpacity: 0.3,
+                                    shadowRadius: 4,
+                                    elevation: 4
+                                }}
+                                onPress={handleCameraOcr}
+                                disabled={ocrLoading}
                                 activeOpacity={0.8}
                             >
-                                <Text style={{ color: theme.text, fontWeight: '600' }}>إلغاء</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.modalBtn, { backgroundColor: theme.primary }]}
-                                onPress={handleSaveItem}
-                                disabled={saving || ocrLoading}
-                                activeOpacity={0.8}
-                            >
-                                {saving ? (
+                                {ocrLoading ? (
                                     <ActivityIndicator size="small" color="#FFF" />
                                 ) : (
-                                    <Text style={{ color: '#FFF', fontWeight: 'bold' }}>حفظ</Text>
+                                    <>
+                                        <Ionicons name="camera" size={22} color="#FFF" />
+                                        <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>
+                                            قراءة بالتصوير الذكي
+                                        </Text>
+                                    </>
                                 )}
                             </TouchableOpacity>
+
+                        <View style={{ flexDirection: 'row-reverse', gap: 16, marginBottom: 16, marginTop: 16 }}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.label, { color: theme.text }]}>التشغيلة:</Text>
+                                <View style={{ position: 'relative', justifyContent: 'center' }}>
+                                    <TextInput
+                                        ref={batchInputRef}
+                                        style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, marginBottom: 0, paddingLeft: 40 }]}
+                                        value={batchInput}
+                                        onChangeText={setBatchInput}
+                                        placeholder={selectedItem ? (selectedItem.batch || selectedItem.suggested_batch || "مثال: ASDFGH") : "مثال: ASDFGH"}
+                                        placeholderTextColor={theme.placeholder}
+                                        autoCapitalize="characters"
+                                        returnKeyType="next"
+                                        blurOnSubmit={false}
+                                        onSubmitEditing={() => expiryInputRef.current?.focus()}
+                                        keyboardType={isBatchNumeric ? 'numeric' : 'default'}
+                                    />
+                                    <TouchableOpacity 
+                                        style={{ position: 'absolute', left: 8, padding: 4 }}
+                                        onPress={() => setIsBatchNumeric(!isBatchNumeric)}
+                                    >
+                                        <Ionicons name={isBatchNumeric ? "text" : "keypad"} size={22} color={theme.primary} />
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            <View style={{ flex: 1 }}>
+                                <Text style={[styles.label, { color: theme.text }]}>الصلاحية:</Text>
+                                <TextInput
+                                    ref={expiryInputRef}
+                                    style={[styles.modalInput, { backgroundColor: theme.background, color: theme.text, borderColor: theme.border, marginBottom: 0 }]}
+                                    value={expiryInput}
+                                    onChangeText={setExpiryInput}
+                                    placeholder={selectedItem ? (selectedItem.expire_date || selectedItem.suggested_expiry || "مثال: 529") : "مثال: 529"}
+                                    placeholderTextColor={theme.placeholder}
+                                    keyboardType="numeric"
+                                    returnKeyType="done"
+                                    onSubmitEditing={handleSaveItem}
+                                />
+                            </View>
                         </View>
+                        </ScrollView>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Info Modal */}
@@ -829,7 +1128,7 @@ export default function GomlaInvoiceDetailsScreen() {
                     </View>
                 </SafeAreaView>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -849,7 +1148,6 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     itemsHeader: {
-        height: 64,
         flexDirection: 'row-reverse',
         justifyContent: 'space-between',
         alignItems: 'center',
@@ -861,11 +1159,8 @@ const styles = StyleSheet.create({
         gap: 12,
     },
     backBtn: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        justifyContent: 'center',
-        alignItems: 'center',
+        padding: 4,
+        marginLeft: -4,
     },
     headerTitleContainer: {
         alignItems: 'flex-end',
@@ -875,10 +1170,10 @@ const styles = StyleSheet.create({
         fontWeight: '900',
     },
     titleLine: {
-        width: 24,
-        height: 3,
-        borderRadius: 1.5,
-        marginTop: 4,
+        width: 25,
+        height: 4,
+        borderRadius: 2,
+        marginTop: -2,
     },
     infoBtn: {
         width: 40,

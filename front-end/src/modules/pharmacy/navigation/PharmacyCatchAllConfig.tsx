@@ -7,6 +7,7 @@ import { Search } from '../screens/Operations/Search';
 import { AccountStatement } from '../screens/Account/AccountStatement';
 import { AddPharmacy } from '../screens/Pharmacy/AddPharmacy';
 import { AccountSettingsHub } from '../screens/Account/AccountSettingsHub';
+import { BackupSettings } from '../screens/Account/BackupSettings';
 
 // Unified Screens
 import { TransactionsList } from '../screens/Transactions/TransactionsList';
@@ -56,6 +57,7 @@ export const PHARMACY_CATCHALL_MAP: Record<string, RouteConfig> = {
   'account-statement': { component: AccountStatement },
   'add-pharmacy': { component: AddPharmacy },
   'settings': { component: AccountSettingsHub },
+  'backup': { component: BackupSettings },
   
   // Feature Groups
   'purchases': { component: PurchasesList },

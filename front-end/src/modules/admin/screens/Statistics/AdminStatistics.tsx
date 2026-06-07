@@ -30,17 +30,20 @@ import { apiFetch } from '@/api/api-client';
 const { width } = Dimensions.get('window');
 
 // Custom Components
+import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
+
 const Header = ({ onBack, onOpenFilter, onPrepareAll, theme }: any) => {
     const insets = useSafeAreaInsets();
     return (
-        <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.background }]}>
-            <TouchableOpacity style={[styles.backCircle, { backgroundColor: theme.card }]} onPress={onBack}>
-                <Ionicons name="arrow-forward" size={24} color={theme.text} />
-            </TouchableOpacity>
-            
-            <View style={styles.headerTitleContainer}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>الإحصائيات</Text>
-                <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
+        <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+            <View style={styles.headerRight}>
+                <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+                    <Ionicons name="chevron-forward" size={28} color={theme.primary} />
+                </TouchableOpacity>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={[styles.headerTitle, { color: theme.primary }]}>الإحصائيات</Text>
+                    <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
+                </View>
             </View>
 
             <View style={styles.headerIcons}>
@@ -660,31 +663,26 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        height: 100,
+        paddingHorizontal: 24,
     },
-    backCircle: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: '#1E293B',
-        justifyContent: 'center',
-        alignItems: 'center',
+    headerRight: { 
+        flexDirection: 'row-reverse', 
+        alignItems: 'center', 
+        gap: 12, 
+        flex: 1 
     },
+    backBtn: { padding: 4, marginLeft: -4 },
     headerTitleContainer: {
-        alignItems: 'center',
+        alignItems: 'flex-end',
     },
     headerTitle: {
-        color: '#FFF',
-        fontSize: 20,
-        fontWeight: 'bold',
+        fontSize: 18,
+        fontWeight: '900',
     },
     titleUnderline: {
-        width: 40,
-        height: 3,
-        backgroundColor: '#818CF8',
-        marginTop: 4,
+        width: 25,
+        height: 4,
+        marginTop: -2,
         borderRadius: 2,
     },
     headerIcons: {

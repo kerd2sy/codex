@@ -22,22 +22,20 @@ import { apiFetch } from '@/api/api-client';
 import { useRoleGuard } from '@/shared/guards/useRoleGuard';
 
 
-// Reusing shared components logic
+import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
+
 const Header = ({ title, onBack, theme }: any) => {
     const insets = useSafeAreaInsets();
     return (
-        <View style={[styles.header, { paddingTop: insets.top + 10, backgroundColor: theme.background }]}>
-            <TouchableOpacity style={[styles.backCircle, { backgroundColor: theme.card }]} onPress={onBack}>
-                <Ionicons name="arrow-forward" size={24} color={theme.text} />
-            </TouchableOpacity>
-            
-            <View style={styles.headerTitleContainer}>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>{title}</Text>
-                <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
-            </View>
-
-            <View style={styles.headerIcons}>
-                {/* Filter removed as per user request */}
+        <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+            <View style={styles.headerRight}>
+                <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+                    <Ionicons name="chevron-forward" size={28} color={theme.primary} />
+                </TouchableOpacity>
+                <View style={styles.headerTitleContainer}>
+                    <Text style={[styles.headerTitle, { color: theme.primary }]}>{title}</Text>
+                    <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
+                </View>
             </View>
         </View>
     );
@@ -226,22 +224,28 @@ const styles = StyleSheet.create({
     header: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        height: 100,
+        paddingHorizontal: 24,
     },
-    backCircle: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        justifyContent: 'center',
-        alignItems: 'center',
+    headerRight: { 
+        flexDirection: 'row-reverse', 
+        alignItems: 'center', 
+        gap: 12, 
+        flex: 1 
     },
-    headerTitleContainer: { alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold' },
-    titleUnderline: { width: 40, height: 3, marginTop: 4, borderRadius: 2 },
-    headerIcons: { flexDirection: 'row-reverse' },
-    headerIconBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
+    backBtn: { padding: 4, marginLeft: -4 },
+    headerTitleContainer: {
+        alignItems: 'flex-end',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '900',
+    },
+    titleUnderline: {
+        width: 25,
+        height: 4,
+        marginTop: -2,
+        borderRadius: 2,
+    },
     
     searchBarContainer: { padding: 15 },
     searchBar: {

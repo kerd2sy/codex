@@ -21,6 +21,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { apiFetch } from '@/api/api-client';
 
+import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
+
 export default function ProductCodingScreen() {
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -146,13 +148,17 @@ export default function ProductCodingScreen() {
     );
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.background, paddingTop: insets.top }]}>
-            <View style={styles.header}>
-                <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: theme.card }]}>
-                    <Ionicons name="arrow-forward" size={24} color={theme.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.text }]}>تكويد الأصناف</Text>
-                <View style={{ width: 44 }} />
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
+            <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+                <View style={styles.headerRight}>
+                    <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+                        <Ionicons name="chevron-forward" size={28} color={theme.primary} />
+                    </TouchableOpacity>
+                    <View style={styles.headerTitleContainer}>
+                        <Text style={[styles.headerTitle, { color: theme.primary }]}>تكويد الأصناف</Text>
+                        <View style={[styles.titleUnderline, { backgroundColor: theme.primary }]} />
+                    </View>
+                </View>
             </View>
 
             <View style={styles.searchContainer}>
@@ -271,9 +277,31 @@ const FormField = ({ label, value, onChange, icon, keyboardType, theme }: any) =
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
-    header: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, height: 60 },
-    backBtn: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 20, fontWeight: 'bold' },
+    header: {
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+    },
+    headerRight: { 
+        flexDirection: 'row-reverse', 
+        alignItems: 'center', 
+        gap: 12, 
+        flex: 1 
+    },
+    backBtn: { padding: 4, marginLeft: -4 },
+    headerTitleContainer: {
+        alignItems: 'flex-end',
+    },
+    headerTitle: {
+        fontSize: 18,
+        fontWeight: '900',
+    },
+    titleUnderline: {
+        width: 25,
+        height: 4,
+        marginTop: -2,
+        borderRadius: 2,
+    },
     
     searchContainer: { padding: 20 },
     searchBox: { flexDirection: 'row-reverse', alignItems: 'center', height: 55, borderRadius: 15, paddingHorizontal: 15, borderWidth: 1 },

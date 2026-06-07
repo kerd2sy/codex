@@ -3,7 +3,7 @@
     "preview": {
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://backend.tabarak-pharma.com"
+        "EXPO_PUBLIC_API_URL": "https://apis.tabarak-pharma.com"
       },
       "android": {
         "buildType": "apk"
@@ -19,7 +19,7 @@
     "production": {
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://backend.tabarak-pharma.com"
+        "EXPO_PUBLIC_API_URL": "https://apis.tabarak-pharma.com"
       },
       "android": {
         "buildType": "apk"

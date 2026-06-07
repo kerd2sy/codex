@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { apiFetch, API_ENDPOINTS } from '@/api/api-client';
@@ -88,9 +89,14 @@ export const useNotifications = () => {
     }, []);
 
     useEffect(() => {
-        fetchNotifications();
+        const interactionPromise = InteractionManager.runAfterInteractions(() => {
+            fetchNotifications();
+        });
         const t = setInterval(() => fetchNotifications(true), 20000);
-        return () => clearInterval(t);
+        return () => {
+            interactionPromise.cancel();
+            clearInterval(t);
+        };
     }, [fetchNotifications]);
 
     const markRead = async (item: any) => {

@@ -4,7 +4,7 @@ import { APIError } from './types';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://backend.tabarak-pharma.com";
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://apis.tabarak-pharma.com";
 
 export const API_ENDPOINTS = {
   AUTH: {
@@ -108,7 +108,7 @@ function isTokenExpired(token: string): boolean {
  * Enhanced API Client with Proactive Token Rotation and Generics
  */
 export async function apiFetch<T = any>(endpoint: string, options: RequestInit = {}): Promise<Response & { json(): Promise<T> }> {
-  const isAuthEndpoint = endpoint.includes('register') || endpoint.includes('login') || endpoint.includes('send-otp') || endpoint.includes('refresh');
+  const isAuthEndpoint = endpoint.includes('register') || endpoint.includes('login') || endpoint.includes('google-native') || endpoint.includes('exchange') || endpoint.includes('send-otp') || endpoint.includes('refresh');
   
   let token = await storage.getItem('access_token');
   
@@ -168,17 +168,19 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // Increased to 30s for slow connections
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds max wait
 
   try {
     const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`;
     let response = await fetch(url, { ...options, headers, signal: controller.signal });
     clearTimeout(timeoutId);
 
-    if (response.status === 401 && !url.includes('/login') && !url.includes('/refresh')) {
+    if (response.status === 401 && !isAuthEndpoint) {
+      console.log(`[API] 401 received for ${url}. isRefreshing: ${isRefreshing}`);
       if (!isRefreshing) {
         isRefreshing = true;
         const refreshToken = await storage.getItem('refresh_token');
+        console.log(`[API] Retrieved refreshToken: ${refreshToken ? 'YES' : 'NO'}`);
         if (refreshToken) {
           try {
             const refreshRes = await fetch(`${API_URL}${API_ENDPOINTS.AUTH.REFRESH}`, {
@@ -219,7 +221,7 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
   } catch (error) {
     clearTimeout(timeoutId);
     if (error instanceof Error && error.name === 'AbortError') {
-       console.log(`[API] Info: Request to ${endpoint} was aborted.`);
+       console.log(`[API] Info: Request to ${endpoint} was aborted after 30s.`);
     }
     throw error;
   }

@@ -74,10 +74,17 @@ export const useLogin = (googleRef: React.RefObject<any>) => {
         await storage.setItem('last_biometric_auth_timestamp', now);
         await storage.setItem('user_has_logged_out', 'false');
 
-        if (user.role === 'admin') {
+        const empRole = user.employee_role || '';
+        const userRoles = user.roles || [];
+
+        const hasRole = (role: string) => userRoles.includes(role) || empRole === role;
+
+        if (hasRole('admin')) {
             router.replace('/(admin)/dashboard');
-        } else if (user.role === 'gomla') {
+        } else if (hasRole('gomla')) {
             router.replace('/(gomla)/dashboard');
+        } else if (hasRole('employee') || ['employee', 'reviewer', 'preparation', 'control', 'distribution'].some(hasRole)) {
+            router.replace('/(employee)/dashboard');
         } else {
             router.replace('/(pharmacy)');
         }
@@ -151,8 +158,8 @@ export const useLogin = (googleRef: React.RefObject<any>) => {
                         const errorData = await response.json().catch(() => ({}));
                         Alert.alert("خطأ", "فشل التحقق من الحساب مع السيرفر: " + (errorData.detail || "كود غير صالح"));
                     }
-                } catch (e) {
-                    Alert.alert("خطأ تقني", "فشلت عملية المصافحة الآمنة مع السيرفر. يرجى المحاولة لاحقاً.");
+                } catch (e: any) {
+                    Alert.alert("خطأ تقني", `فشلت عملية المصافحة الآمنة مع السيرفر: ${e.message || String(e)}`);
                 } finally {
                     setLoading(false);
                 }
@@ -176,16 +183,53 @@ export const useLogin = (googleRef: React.RefObject<any>) => {
         if (auth.success) {
             setLoading(true);
             try {
+                let token = await storage.getItem('access_token');
+                if (!token) {
+                    const refreshToken = await storage.getItem('refresh_token');
+                    if (refreshToken) {
+                        try {
+                            const refreshRes = await fetch(`${API_URL}${API_ENDPOINTS.AUTH.REFRESH}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${refreshToken}` }
+                            });
+                            if (refreshRes.ok) {
+                                const data = await refreshRes.json();
+                                await storage.setItem('access_token', data.access_token);
+                                await storage.setItem('refresh_token', data.refresh_token);
+                            } else {
+                                Alert.alert("الجلسة منتهية", "يرجى تسجيل الدخول مجدداً (بجوجل أو البريد) لتجديد جلستك.");
+                                return;
+                            }
+                        } catch (e) {
+                            Alert.alert("خطأ في الاتصال", "تعذر الاتصال بالسيرفر. تأكد من الإنترنت وحاول مجدداً.");
+                            return;
+                        }
+                    } else {
+                        Alert.alert("الجلسة منتهية", "انتهت صلاحية الجلسة بالكامل. يرجى تسجيل الدخول مجدداً (بجوجل أو البريد).");
+                        return;
+                    }
+                }
+
                 const res = await apiFetch<User>(API_ENDPOINTS.AUTH.ME);
                 if (res.ok) {
                     const userData = await res.json();
                     await storage.setItem('user', JSON.stringify(userData));
                     await storage.setItem('last_biometric_auth_timestamp', Date.now().toString());
-                    if (userData.role === 'admin') router.replace('/(admin)/dashboard');
-                    else if (userData.role === 'gomla') router.replace('/(gomla)/dashboard');
+
+                    const empRole = userData.employee_role || '';
+                    const userRoles = userData.roles || [];
+                    const hasRole = (role: string) => userRoles.includes(role) || empRole === role;
+
+                    if (hasRole('admin')) router.replace('/(admin)/dashboard');
+                    else if (hasRole('gomla')) router.replace('/(gomla)/dashboard');
+                    else if (hasRole('employee') || ['employee', 'reviewer', 'preparation', 'control', 'distribution'].some(hasRole)) router.replace('/(employee)/dashboard');
                     else router.replace('/(pharmacy)');
                     return;
+                } else {
+                    Alert.alert("الجلسة منتهية", "يرجى تسجيل الدخول باستخدام البريد الإلكتروني وكلمة المرور لتجديد جلستك قبل استخدام البصمة.");
                 }
+            } catch (e) {
+                Alert.alert("خطأ في الاتصال", "تعذر الاتصال بالسيرفر. تأكد من الإنترنت وحاول مجدداً.");
             } finally {
                 setLoading(false);
             }
@@ -219,8 +263,8 @@ export const useLogin = (googleRef: React.RefObject<any>) => {
                     } else {
                         Alert.alert("خطأ في المصافحة", "كود التوثيق منتهي أو غير صالح");
                     }
-                } catch (e) {
-                    Alert.alert("خطأ تقني", "فشلت عملية المصافحة الآمنة");
+                } catch (e: any) {
+                    Alert.alert("خطأ تقني", `فشلت عملية المصافحة الآمنة: ${e.message || String(e)}`);
                 } finally {
                     setLoading(false);
                 }

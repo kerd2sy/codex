@@ -1,3 +1,3 @@
-import { AdminSettings } from '../../src/modules/admin/screens/Settings/AdminSettings';
+import { AccountSettingsHub } from '../../src/modules/pharmacy/screens/Account/AccountSettingsHub';
 
-export default AdminSettings;
+export default AccountSettingsHub;

@@ -18,14 +18,46 @@ export const useRoleGuard = (allowedRole: UserRole) => {
                     router.replace('/(auth)/login');
                     return;
                 }
+                const user = JSON.parse(userJson!);
+                const userRoles = user.roles;
+                if (!userRoles) {
+                    // Outdated session, no roles exist, force logout
+                    await storage.deleteItem('user');
+                    await storage.deleteItem('access_token');
+                    router.replace('/(auth)/login');
+                    return;
+                }
+                const empRole = user.employee_role || '';
 
-                const user = JSON.parse(userJson);
-                const userRole = user.role as UserRole;
+                // Role check: in roles array
+                const hasRole = (r: string) => userRoles.includes(r);
+                const isEmployee = hasRole('employee') || !!empRole;
+                // Gomla workers are employees who have a gomla job title
+                const isGomlaWorker = empRole === 'gomla' || empRole === 'gomla_prep';
+                const isGomlaSection = allowedRole === 'gomla';
 
-                if (userRole === allowedRole || userRole === 'admin') {
+                // Guard logic
+                let authorized = false;
+                if (hasRole('admin')) {
+                    authorized = true; // Admin can access everything
+                } else if (allowedRole === 'admin') {
+                    authorized = false; // Not admin trying to access admin
+                } else if (isGomlaSection) {
+                    // Gomla section: only employees with gomla or gomla_prep job
+                    authorized = isGomlaWorker;
+                } else if (allowedRole === 'employee') {
+                    // Employee section: any employee (all job types including gomla)
+                    authorized = isEmployee;
+                } else if (allowedRole === 'pharmacist') {
+                    authorized = hasRole('pharmacist');
+                }
+
+                if (authorized) {
                     setAuthorized(true);
                 } else {
-                    if (userRole === 'gomla') router.replace('/(gomla)/dashboard');
+                    // Redirect to the right dashboard (gomla workers go to employee first)
+                    if (hasRole('admin')) router.replace('/(admin)/dashboard');
+                    else if (isEmployee) router.replace('/(employee)/dashboard');
                     else router.replace('/(pharmacy)');
                 }
             } catch (error) {

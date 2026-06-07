@@ -1,5 +1,5 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View, RefreshControl, InteractionManager } from 'react-native';
 import { useRouter } from '@/hooks/useRouter';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '../../../../core/theme';
@@ -20,8 +20,11 @@ export const Notifications = () => {
 
     useFocusEffect(
         useCallback(() => {
-            refetch(true); 
-            clearBadge();  
+            const task = InteractionManager.runAfterInteractions(() => {
+                refetch(true); 
+                clearBadge();  
+            });
+            return () => task.cancel();
         }, [refetch, clearBadge])
     );
 
@@ -140,6 +143,10 @@ export const Notifications = () => {
                     styles.list,
                     notifications.length === 0 && !loading && { flexGrow: 1, justifyContent: 'center' }
                 ]}
+                initialNumToRender={8}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                removeClippedSubviews={true}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />}
                 ListEmptyComponent={!loading ? (
                     <View style={styles.empty}>

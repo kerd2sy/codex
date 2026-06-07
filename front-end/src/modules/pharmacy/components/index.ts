@@ -2,7 +2,6 @@ export * from './BalanceCard';
 export * from './CategoryGrid';
 export * from './RecentProductCard';
 export * from './ProductCard';
-export * from './DashboardHeader';
 export * from './DashboardSearch';
 export * from './PharmacySwitchModal';
 export * from './SmallOrderCard';

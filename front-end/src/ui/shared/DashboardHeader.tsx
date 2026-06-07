@@ -4,17 +4,20 @@ import { Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { User, Pharmacy } from '@/shared/api/types';
 import { getAvatarUrl } from '@/shared/utils/avatar';
+import { DashboardSwitcherModal } from '@/ui/shared/DashboardSwitcherModal';
 
 interface DashboardHeaderProps {
   theme: any;
   insets: { top: number };
   currentUser: User | null;
-  selectedPharmacy: { id: string; name: string };
+  selectedPharmacy?: { id: string; name: string };
   unreadCount: number;
-  lastUpdated: number | null;
-  onPressSwitch: () => void;
+  lastUpdated?: number | null;
+  onPressSwitch?: () => void;
   onPressProfile: () => void;
   onPressNotifications: () => void;
+  title?: string;
+  subtitle?: string;
 }
 
 import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
@@ -23,7 +26,7 @@ import NotificationJson from '@/assets/json/Notification.json';
 
 export const DashboardHeader = memo(({ 
   theme, insets, currentUser, selectedPharmacy, unreadCount, lastUpdated,
-  onPressSwitch, onPressProfile, onPressNotifications 
+  onPressSwitch, onPressProfile, onPressNotifications, title, subtitle
 }: DashboardHeaderProps) => {
 
   const formatLastSync = (ts: number | null) => {
@@ -63,17 +66,52 @@ export const DashboardHeader = memo(({
     }
   }, [unreadCount]);
 
+  const [isSwitcherVisible, setIsSwitcherVisible] = React.useState(false);
+
+  // Only the true system roles: admin, pharmacist, employee
+  const allRoles = React.useMemo(() => {
+      if (!currentUser) return [];
+      const roles: string[] = [];
+      if (currentUser.roles) {
+          currentUser.roles.forEach((r: string) => {
+              // Only include the 3 valid roles
+              if (r === 'admin' || r === 'pharmacist' || r === 'employee') {
+                  roles.push(r);
+              }
+          });
+      }
+      return roles;
+  }, [currentUser]);
+
+  const employeeRole = currentUser?.employee_role || '';
+
+  const handleTitlePress = () => {
+      if (onPressSwitch) {
+          onPressSwitch();
+      }
+  };
+
+  const showChevron = !!onPressSwitch;
+
   return (
     <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+      <DashboardSwitcherModal 
+          visible={isSwitcherVisible} 
+          onClose={() => setIsSwitcherVisible(false)} 
+          userRoles={allRoles}
+          employeeRole={employeeRole}
+          currentRole={employeeRole}
+      />
+
       <View style={styles.locationContainer}>
           <Text style={[styles.deliverToText, { color: theme.muted }]}>
-            {selectedPharmacy.id !== '0' ? 'أنت تدير صيدلية' : 'مرحباً بك'}
+            {subtitle ? subtitle : (selectedPharmacy && selectedPharmacy.id !== '0' ? 'أنت تدير صيدلية' : 'مرحباً بك')}
           </Text>
-          <TouchableOpacity style={styles.locationRow} onPress={onPressSwitch}>
+          <TouchableOpacity style={styles.locationRow} onPress={handleTitlePress} disabled={!showChevron} activeOpacity={showChevron ? 0.2 : 1}>
               <View style={{ alignItems: 'flex-end' }}>
                 <View style={styles.locationTitleRow}>
-                  <Text style={[styles.locationText, { color: theme.text }]}>{selectedPharmacy.name}</Text>
-                  <Ionicons name="chevron-down" size={16} color={theme.icon} style={{ marginLeft: 4 }} />
+                  <Text style={[styles.locationText, { color: theme.text }]}>{title ? title : (selectedPharmacy ? selectedPharmacy.name : '')}</Text>
+                  {showChevron && <Ionicons name="chevron-down" size={16} color={theme.icon} style={{ marginLeft: 4 }} />}
                 </View>
               </View>
           </TouchableOpacity>

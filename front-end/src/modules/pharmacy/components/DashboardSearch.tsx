@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
+import BarcodeLottie from '../../../ui/shared/BarcodeLottie';
 
 interface DashboardSearchProps {
   theme: any;
@@ -37,12 +38,7 @@ export const DashboardSearch = memo(({
             </TouchableOpacity>
           )}
           <TouchableOpacity onPress={onScanPress}>
-              <LottieView
-                  source={require('@/assets/json/Barcode.json')}
-                  autoPlay
-                  loop
-                  style={{ width: 40, height: 40 }}
-              />
+              <BarcodeLottie style={{ width: 40, height: 40 }} />
           </TouchableOpacity>
       </View>
     </View>

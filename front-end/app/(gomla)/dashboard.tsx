@@ -1,20 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { 
     View, Text, StyleSheet, TextInput, TouchableOpacity, 
-    ActivityIndicator, Alert, ScrollView, Image
+    ActivityIndicator, Alert, ScrollView, Image, Modal, FlatList, RefreshControl
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import LottieView from 'lottie-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from '@/hooks/useRouter';
 import { Colors } from '../../src/core/theme';
 import { useTheme } from '@/context/ThemeContext';
 import { BarcodeScannerModal } from '../../src/modules/gomla/components/BarcodeScannerModal';
-import { fetchGomlaInvoice } from '../../src/modules/gomla/services/gomlaService';
+import BarcodeLottie from '../../src/ui/shared/BarcodeLottie';
+import { DashboardHeader } from '@/ui/shared/DashboardHeader';
+import { fetchGomlaInvoice, fetchRecentGomlaInvoices } from '../../src/modules/gomla/services/gomlaService';
 import { emitForceLogout } from '../../src/shared/guards/auth-events';
+import { storage } from '@/shared/utils/storage';
+import { processSyncQueue, getQueueLength, getFailedQueueLength } from '../../src/modules/gomla/services/syncManager';
+import { getAvatarUrl } from '@/shared/utils/avatar';
 
 export default function GomlaDashboard() {
     const { colorScheme } = useTheme();
+    const insets = useSafeAreaInsets();
     const theme = Colors[colorScheme];
     const isDark = colorScheme === 'dark';
     const router = useRouter();
@@ -24,63 +31,138 @@ export default function GomlaDashboard() {
     const [currentUser, setCurrentUser] = useState<any>(null);
     const [recentInvoices, setRecentInvoices] = useState<any[]>([]);
     const [scannerVisible, setScannerVisible] = useState(false);
+    const [openedInvoices, setOpenedInvoices] = useState<string[]>([]);
+    const [syncCount, setSyncCount] = useState(0);
+    const [failedCount, setFailedCount] = useState(0);
+    const [refreshing, setRefreshing] = useState(false);
+    
+    const [dateModalVisible, setDateModalVisible] = useState(false);
+    
+    const pastDays = React.useMemo(() => {
+        const days = [];
+        for (let i = 0; i < 5; i++) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            days.push(`${yyyy}-${mm}-${dd}`);
+        }
+        return days;
+    }, []);
 
-    const loadUserAndRecent = async () => {
+    const [selectedDate, setSelectedDate] = useState<string>(pastDays[0]);
+
+    const loadUserAndRecent = async (dateStr = selectedDate) => {
         try {
-            const userJson = await AsyncStorage.getItem('user');
+            const userJson = await storage.getItem('user');
             if (userJson) {
                 setCurrentUser(JSON.parse(userJson));
             }
-            const recentJson = await AsyncStorage.getItem('@recent_gomla_invoices');
-            if (recentJson) {
-                const parsed = JSON.parse(recentJson);
-                if (Array.isArray(parsed)) {
-                    const now = Date.now();
-                    const filtered = parsed.filter(item => {
-                        return !item.timestamp || (now - item.timestamp) < 8 * 3600 * 1000;
+            
+            try {
+                const dbRecent = await fetchRecentGomlaInvoices(50, dateStr || undefined);
+                if (dbRecent && Array.isArray(dbRecent)) {
+                    const formatted = dbRecent.map(inv => ({
+                        id: inv.id,
+                        clientName: inv.clientName || 'عميل غير معروف',
+                        total: inv.total,
+                        date: inv.date,
+                        is_fully_audited: inv.is_fully_audited,
+                        audited_items: inv.audited_items || 0,
+                        total_items: inv.total_items || 0,
+                        audit_status: inv.audit_status,
+                        editing_by_name: inv.editing_by_name,
+                        audited_by_name: inv.audited_by_name,
+                        timestamp: Date.now()
+                    }));
+                    
+                    formatted.sort((a, b) => {
+                        const getPriority = (inv: any) => {
+                            // Highest priority (top): Currently being edited OR partially audited
+                            if (inv.audit_status === 'editing' || (!inv.is_fully_audited && inv.audited_items > 0)) {
+                                return 0; 
+                            }
+                            // Lowest priority (bottom): Fully audited
+                            if (inv.is_fully_audited || inv.audit_status === 'audited') {
+                                return 2; 
+                            }
+                            // Pending (Middle)
+                            return 1; 
+                        };
+                        
+                        const aPriority = getPriority(a);
+                        const bPriority = getPriority(b);
+                        
+                        if (aPriority !== bPriority) {
+                            return aPriority - bPriority; 
+                        }
+                        return b.id - a.id;
                     });
-                    setRecentInvoices(filtered);
-                    if (filtered.length !== parsed.length) {
-                        await AsyncStorage.setItem('@recent_gomla_invoices', JSON.stringify(filtered));
-                    }
+                    
+                    setRecentInvoices(formatted);
                 } else {
                     setRecentInvoices([]);
                 }
+            } catch (err) {
+                console.error("Failed to fetch recent invoices from server:", err);
             }
+            
+            try {
+                const openedJson = await AsyncStorage.getItem('@opened_gomla_invoices');
+                if (openedJson) {
+                    setOpenedInvoices(JSON.parse(openedJson));
+                }
+            } catch (e) {}
         } catch (error) {
-            console.error("Failed to load user or recent invoices", error);
+            console.error("Failed to load user", error);
         }
     };
 
     useEffect(() => {
-        loadUserAndRecent();
-    }, []);
+        const init = async () => {
+            try {
+                const savedDate = await AsyncStorage.getItem('@gomla_dashboard_date');
+                if (savedDate && pastDays.includes(savedDate)) {
+                    setSelectedDate(savedDate);
+                    loadUserAndRecent(savedDate);
+                } else {
+                    loadUserAndRecent(pastDays[0]);
+                }
+            } catch (e) {
+                loadUserAndRecent(pastDays[0]);
+            }
+        };
+        init();
+    }, [pastDays]);
 
     // Re-check recent invoices when screen mounts or changes
     // Since Expo Router keeps screens in stack, we will reload when dashboard is re-focused
     useEffect(() => {
         const interval = setInterval(() => {
-            loadUserAndRecent();
+            loadUserAndRecent(selectedDate);
+            
+            // Background Sync Manager
+            processSyncQueue().then(() => {
+                getQueueLength().then(setSyncCount);
+                getFailedQueueLength().then(setFailedCount);
+            });
         }, 3000); // Poll recent invoices list every 3s to reflect any external changes seamlessly
+        
+        // Initial check for sync queue
+        getQueueLength().then(setSyncCount);
+        getFailedQueueLength().then(setFailedCount);
+        
         return () => clearInterval(interval);
-    }, []);
+    }, [selectedDate]);
 
-    const handleLogout = async () => {
-        Alert.alert(
-            "تسجيل الخروج",
-            "هل أنت متأكد من رغبتك في تسجيل الخروج؟",
-            [
-                { text: "إلغاء", style: "cancel" },
-                { 
-                    text: "تسجيل الخروج", 
-                    style: "destructive",
-                    onPress: async () => {
-                        emitForceLogout();
-                    }
-                }
-            ]
-        );
-    };
+    const onRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        await loadUserAndRecent(selectedDate);
+        setRefreshing(false);
+    }, [selectedDate]);
+
+
 
     const handleSearch = async (idToSearch?: string) => {
         const id = idToSearch || invoiceId;
@@ -89,46 +171,18 @@ export default function GomlaDashboard() {
             return;
         }
 
-        setLoading(true);
-        try {
-            const data = await fetchGomlaInvoice(id);
-            console.log("[Gomla Dashboard] Fetched Invoice Data Successfully:", data);
-
-            if (data) {
-                // Add to recent invoices list
-                setRecentInvoices(prev => {
-                    const filtered = prev.filter(item => item.id !== data.id);
-                    const newRecent = [
-                        { 
-                            id: data.id, 
-                            clientName: data.pharmacy_name || 'عميل غير معروف', 
-                            total: data.total,
-                            date: data.date,
-                            timestamp: Date.now()
-                        },
-                        ...filtered
-                    ];
-                    
-                    const now = Date.now();
-                    const filteredRecent = newRecent.filter(item => {
-                        return !item.timestamp || (now - item.timestamp) < 8 * 3600 * 1000;
-                    }).slice(0, 5); // Keep last 5
-                    
-                    AsyncStorage.setItem('@recent_gomla_invoices', JSON.stringify(filteredRecent))
-                        .catch(err => console.error("Failed to save recent invoices", err));
-                    
-                    return filteredRecent;
-                });
-
-                // Navigate directly to the dedicated invoice details screen!
-                router.push({ pathname: '/(gomla)/invoice', params: { id: data.id.toString() } });
+        // Track opened invoice locally to dim it if needed
+        setOpenedInvoices(prev => {
+            if (!prev.includes(id.toString())) {
+                const newOpened = [...prev, id.toString()];
+                AsyncStorage.setItem('@opened_gomla_invoices', JSON.stringify(newOpened)).catch(() => {});
+                return newOpened;
             }
-        } catch (error) {
-            console.error("[Gomla Dashboard] Fetch Error:", error);
-            Alert.alert("خطأ في التحميل", "تعذر العثور على الفاتورة. يرجى التأكد من الرقم والمحاولة مجدداً.");
-        } finally {
-            setLoading(false);
-        }
+            return prev;
+        });
+
+        // Navigate directly without doing a duplicate fetch!
+        router.push({ pathname: '/(gomla)/invoice', params: { id: id.toString() } });
     };
 
     const handleScan = (barcode: string) => {
@@ -137,46 +191,53 @@ export default function GomlaDashboard() {
         handleSearch(barcode);
     };
 
+    const totalInvoices = recentInvoices.length;
+    const auditedInvoicesCount = recentInvoices.filter(i => i.is_fully_audited).length;
+    const totalItems = recentInvoices.reduce((sum, inv) => sum + (inv.total_items || 0), 0);
+
     return (
-        <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <View style={[styles.container, { backgroundColor: theme.background }]}>
             {loading ? (
                 <View style={styles.loaderContainer}>
                     <ActivityIndicator size="large" color={theme.primary} />
-                    <Text style={[styles.loaderText, { color: theme.muted }]}>جارٍ جلب الفاتورة من قاعدة البيانات...</Text>
+                    <Text style={[styles.loaderText, { color: theme.muted }]}>جارٍ جلب البيانات من قاعدة البيانات...</Text>
                 </View>
             ) : (
                 <ScrollView 
                     style={{ flex: 1 }}
                     contentContainerStyle={{ paddingBottom: 40 }}
                     showsVerticalScrollIndicator={false}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />
+                    }
                 >
-                    {/* Gomla Dashboard Header (Transparent Pharmacist Style) */}
-                    <View style={[styles.header, { marginTop: 15, marginBottom: 20 }]}>
-                        <View style={styles.locationContainer}>
-                            <Text style={[styles.deliverToText, { color: theme.muted }]}>
-                                قسم الجملة والتوزيع
-                            </Text>
-                            <View style={styles.locationRow}>
-                                <Text style={[styles.locationText, { color: theme.text }]}>
-                                    أهلاً بك، {currentUser?.name || 'مسؤول الجرد'} 👋
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.headerRight}>
-                            <TouchableOpacity 
-                                style={[styles.logoutBtnCircle, { backgroundColor: 'rgba(244, 67, 54, 0.12)', width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' }]}
-                                onPress={handleLogout}
-                                activeOpacity={0.7}
-                            >
-                                <Ionicons name="log-out-outline" size={20} color="#F44336" />
-                            </TouchableOpacity>
-                        </View>
+                    {/* Gomla Dashboard Header */}
+                    <View style={{ marginBottom: 20 }}>
+                        <DashboardHeader 
+                            theme={theme}
+                            insets={insets}
+                            currentUser={currentUser}
+                            unreadCount={0}
+                            onPressProfile={() => router.push('/(gomla)/settings')}
+                            onPressNotifications={() => {}}
+                            title="قسم الجملة"
+                            subtitle="مرحباً بك في"
+                        />
                     </View>
 
-                    {/* Glowing Search Section (Identical with correct padding) */}
                     <View style={[styles.searchSection, { marginBottom: 24 }]}>
-                        <View style={[styles.searchBox, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: isDark ? '#000' : '#1A237E' }]}>
+                        <View style={[
+                            styles.searchBox, 
+                            { 
+                                backgroundColor: isDark ? theme.surface : '#FFFFFF', 
+                                borderColor: theme.primary + '30', 
+                                shadowColor: theme.primary,
+                                elevation: isDark ? 4 : 12,
+                                shadowOffset: { width: 0, height: 8 },
+                                shadowOpacity: isDark ? 0.2 : 0.15,
+                                shadowRadius: 16,
+                            }
+                        ]}>
                             <TextInput
                                 style={[styles.input, { color: theme.text }]}
                                 placeholder="ابحث برقم الفاتورة..."
@@ -186,62 +247,107 @@ export default function GomlaDashboard() {
                                 keyboardType="number-pad"
                                 onSubmitEditing={() => handleSearch()}
                             />
-                            <TouchableOpacity 
-                                style={[styles.searchIconBtn, { backgroundColor: theme.accent }]}
-                                onPress={() => {
-                                    setScannerVisible(true);
-                                }}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="barcode-outline" size={22} color="#FFF" />
-                            </TouchableOpacity>
-                            <TouchableOpacity 
-                                style={[styles.searchBtn, { backgroundColor: theme.primary }]}
-                                onPress={() => handleSearch()}
-                                activeOpacity={0.8}
-                            >
-                                <Ionicons name="search" size={22} color="#FFF" />
+                            {invoiceId.length > 0 && (
+                                <TouchableOpacity 
+                                    style={styles.clearBtn}
+                                    onPress={() => setInvoiceId('')}
+                                >
+                                    <Ionicons name="close-circle" size={20} color={theme.placeholder} />
+                                </TouchableOpacity>
+                            )}
+                            <TouchableOpacity onPress={() => setScannerVisible(true)}>
+                                <BarcodeLottie style={{ width: 40, height: 40 }} />
                             </TouchableOpacity>
                         </View>
                     </View>
+
+                    {syncCount > 0 && (
+                        <View style={{ marginHorizontal: '5%', marginBottom: 16, backgroundColor: theme.accent + '20', padding: 12, borderRadius: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="cloud-offline-outline" size={24} color={theme.accent} />
+                                <Text style={{ color: theme.accent, fontWeight: 'bold' }}>وضع عدم الاتصال</Text>
+                            </View>
+                            <Text style={{ color: theme.text, fontSize: 13 }}>{syncCount} صنف في انتظار المزامنة</Text>
+                        </View>
+                    )}
+
+                    {failedCount > 0 && (
+                        <View style={{ marginHorizontal: '5%', marginBottom: 16, backgroundColor: '#FFEBEB', padding: 12, borderRadius: 12, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#FFCDD2' }}>
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="warning-outline" size={24} color="#D32F2F" />
+                                <Text style={{ color: '#D32F2F', fontWeight: 'bold' }}>تحذير هام</Text>
+                            </View>
+                            <Text style={{ color: '#D32F2F', fontSize: 13, flex: 1, textAlign: 'left', marginRight: 10 }}>يوجد {failedCount} أصناف رفض السيرفر حفظها، يرجى مراجعة الفواتير.</Text>
+                        </View>
+                    )}
 
                     {/* Wholesale Stats Card (Premium BalanceCard Style) */}
                     <TouchableOpacity 
                         style={styles.balanceCard} 
                         activeOpacity={0.9}
-                        onPress={() => {
-                            Alert.alert("معلومات الجرد", "توضح هذه البطاقة إحصائيات ونشاط عملية جرد فواتير الجملة اليوم.");
-                        }}
+                        onPress={() => setDateModalVisible(true)}
                     >
                         <Image source={require('@/assets/images/balance_bg.png')} style={styles.balanceBg} resizeMode="cover" />
                         <View style={styles.balanceOverlay} />
                         <View style={styles.balanceContent}>
                             <View style={styles.balanceHeader}>
-                                <Text style={styles.balanceLabel}>إحصائيات الجرد والنشاط</Text>
-                                <Ionicons name="wallet-outline" size={24} color="#FFFFFF" />
-                            </View>
-                            <View style={styles.balanceMain}>
-                                <Text style={styles.balanceAmount}>{recentInvoices.length}</Text>
-                                <Text style={styles.currency}>فواتير اليوم</Text>
-                            </View>
-                            <View style={styles.balanceFooter}>
-                                <View style={styles.consumptionContainer}>
-                                    <View style={{ backgroundColor: '#4CAF50', width: 6, height: 6, borderRadius: 3, marginLeft: 4 }} />
-                                    <Text style={styles.consumptionValue}>النظام متصل بالخادم</Text>
+                                <Text style={styles.balanceLabel}>إحصائيات الإنجاز (يوم {selectedDate})</Text>
+                                <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 }}>
+                                    <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>مباشر</Text>
                                 </View>
-                                <Text style={styles.lastUpdate}>مستوى الدقة: 100%</Text>
+                            </View>
+                            
+                            <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 14, gap: 12 }}>
+                                {/* Invoices Stats Box */}
+                                <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }}>
+                                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 'bold' }}>الفواتير</Text>
+                                        <Ionicons name="document-text" size={16} color="#A5D6A7" />
+                                    </View>
+                                    <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-end', marginTop: 10, gap: 4 }}>
+                                        <Text style={{ fontSize: 26, fontWeight: '900', color: '#FFF' }}>{auditedInvoicesCount}</Text>
+                                        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>من {totalInvoices}</Text>
+                                    </View>
+                                    
+                                    {/* Progress Bar */}
+                                    <View style={{ height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, marginTop: 10, overflow: 'hidden', flexDirection: 'row-reverse' }}>
+                                        <View style={{ width: totalInvoices > 0 ? `${(auditedInvoicesCount/totalInvoices)*100}%` : '0%', height: '100%', backgroundColor: '#A5D6A7', borderRadius: 3 }} />
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: '#FFB74D', marginTop: 8, textAlign: 'left', fontWeight: 'bold' }}>{totalInvoices - auditedInvoicesCount} متبقية</Text>
+                                </View>
+
+                                {/* Items Stats Box */}
+                                <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' }}>
+                                    <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <Text style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13, fontWeight: 'bold' }}>الأصناف</Text>
+                                        <Ionicons name="cube" size={16} color="#81C784" />
+                                    </View>
+                                    
+                                    <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-end', marginTop: 10, gap: 4 }}>
+                                        <Text style={{ fontSize: 26, fontWeight: '900', color: '#FFF' }}>{recentInvoices.reduce((sum, inv) => sum + (inv.audited_items || 0), 0)}</Text>
+                                        <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.6)', marginBottom: 4 }}>من {recentInvoices.reduce((sum, inv) => sum + (inv.total_items || 0), 0)}</Text>
+                                    </View>
+
+                                    {/* Progress Bar */}
+                                    <View style={{ height: 5, backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 3, marginTop: 10, overflow: 'hidden', flexDirection: 'row-reverse' }}>
+                                        <View style={{ width: recentInvoices.reduce((sum, inv) => sum + (inv.total_items || 0), 0) > 0 ? `${(recentInvoices.reduce((sum, inv) => sum + (inv.audited_items || 0), 0)/recentInvoices.reduce((sum, inv) => sum + (inv.total_items || 0), 0))*100}%` : '0%', height: '100%', backgroundColor: '#81C784', borderRadius: 3 }} />
+                                    </View>
+                                    <Text style={{ fontSize: 11, color: '#FFB74D', marginTop: 8, textAlign: 'left', fontWeight: 'bold' }}>{recentInvoices.reduce((sum, inv) => sum + ((inv.total_items || 0) - (inv.audited_items || 0)), 0)} متبقية</Text>
+                                </View>
                             </View>
                         </View>
                     </TouchableOpacity>
 
                     {/* Recent Invoices Section (SmallOrderCard Style) */}
                     <View style={{ marginTop: 10, paddingHorizontal: '5%', marginBottom: 12 }}>
-                        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>آخر الفواتير المجرودة</Text>
+                        <Text style={{ color: theme.text, fontSize: 16, fontWeight: '800', textAlign: 'right' }}>فواتير يوم {selectedDate}</Text>
                     </View>
 
                     {recentInvoices.length > 0 ? (
                         recentInvoices.map((item) => {
-                            const steps = ['كتابة', 'تدقيق', 'حفظ'];
+                            const steps = ['كتابة', 'بداية التحضير', 'تم التحضير'];
+                            const isAudited = item.is_fully_audited === true || item.audit_status === 'audited';
+                            
                             return (
                                 <TouchableOpacity 
                                     key={item.id} 
@@ -258,12 +364,37 @@ export default function GomlaDashboard() {
                                         </View>
                                     </View>
 
+                                    {(item.editing_by_name || item.audited_by_name) ? (() => {
+                                        const auditorName = item.audited_by_name || item.editing_by_name;
+                                        const statusText = isAudited ? `تم التحضير بواسطة: ${auditorName}` : `جاري التحضير بواسطة: ${auditorName}`;
+                                        const statusColor = isAudited ? '#4CAF50' : theme.accent;
+                                        return (
+                                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', marginBottom: 12, marginTop: -4 }}>
+                                                <Ionicons name="person-circle-outline" size={16} color={statusColor} style={{ marginLeft: 4 }} />
+                                                <Text style={{ fontSize: 12, color: statusColor, fontWeight: 'bold' }}>
+                                                    {statusText}
+                                                </Text>
+                                            </View>
+                                        );
+                                    })() : null}
+
                                     <View style={styles.orderProgressContainer}>
                                         <View style={styles.orderStepsRow}>
                                             {steps.map((step, idx) => {
                                                 const stepNum = idx + 1;
-                                                const isCompleted = stepNum < 3; // Created and audited are completed
-                                                const isActive = stepNum === 3; // currently at save
+                                                let isCompleted = false;
+                                                let isActive = false;
+                                                
+                                                const hasItems = (item.audited_items && item.audited_items > 0);
+                                                if (stepNum === 1) {
+                                                    isCompleted = true; // Always created
+                                                } else if (stepNum === 2) {
+                                                    isCompleted = hasItems || isAudited;
+                                                    isActive = !isCompleted;
+                                                } else if (stepNum === 3) {
+                                                    isCompleted = isAudited;
+                                                    isActive = hasItems && !isAudited;
+                                                }
                                                 
                                                 return (
                                                     <React.Fragment key={idx}>
@@ -314,6 +445,12 @@ export default function GomlaDashboard() {
                                             <Text style={[styles.orderFooterValue, { color: theme.text }]}>{item.date}</Text>
                                         </View>
                                         <View style={styles.orderFooterItem}>
+                                            <Ionicons name="cube-outline" size={14} color={theme.primary} style={{ marginLeft: 4 }} />
+                                            <Text style={[styles.orderFooterValue, { color: theme.text }]}>
+                                                {item.audited_items || 0} / {item.total_items || 0} صنف
+                                            </Text>
+                                        </View>
+                                        <View style={styles.orderFooterItem}>
                                             <Ionicons name="cash-outline" size={14} color={theme.accent} style={{ marginLeft: 4 }} />
                                             <Text style={[styles.orderPriceText, { color: theme.accent }]}>{item.total} ج.م</Text>
                                         </View>
@@ -324,7 +461,7 @@ export default function GomlaDashboard() {
                     ) : (
                         <View style={[styles.recentInvoicesPlaceholder, { backgroundColor: theme.surface, borderColor: theme.border, marginHorizontal: '5%' }]}>
                             <Ionicons name="file-tray-outline" size={32} color={theme.muted} style={{ marginBottom: 8 }} />
-                            <Text style={[styles.recentInvoicesPlaceholderText, { color: theme.muted }]}>لا توجد فواتير تم جردها مؤخراً</Text>
+                            <Text style={[styles.recentInvoicesPlaceholderText, { color: theme.muted }]}>لا توجد فواتير تم تحضيرها مؤخراً</Text>
                         </View>
                     )}
                 </ScrollView>
@@ -335,8 +472,65 @@ export default function GomlaDashboard() {
                 visible={scannerVisible} 
                 onClose={() => setScannerVisible(false)} 
                 onScan={handleScan} 
+                hintText="قم بتوجيه الكاميرا إلى باركود الفاتورة"
             />
-        </SafeAreaView>
+
+            {/* Date Selection Modal */}
+            <Modal
+                visible={dateModalVisible}
+                transparent={true}
+                animationType="slide"
+                onRequestClose={() => setDateModalVisible(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={[styles.modalContent, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                        <View style={styles.modalHeader}>
+                            <Text style={[styles.modalTitle, { color: theme.text }]}>تحديد تاريخ التحضير</Text>
+                            <TouchableOpacity onPress={() => setDateModalVisible(false)}>
+                                <Ionicons name="close-circle" size={28} color={theme.muted} />
+                            </TouchableOpacity>
+                        </View>
+                        <Text style={[styles.modalSubtitle, { color: theme.muted }]}>اختر اليوم الذي ترغب في عرض فواتيره:</Text>
+                        
+                        <View style={{ flex: 1, marginTop: 10 }}>
+                            <FlatList
+                                data={pastDays.map((d, i) => ({ 
+                                    label: i === 0 ? `اليوم (${d})` : i === 1 ? `أمس (${d})` : d, 
+                                    value: d 
+                                }))}
+                                keyExtractor={(item) => item.label}
+                                renderItem={({ item }) => (
+                                    <TouchableOpacity 
+                                        style={[
+                                            styles.dateOptionBtn, 
+                                            { borderBottomColor: theme.border },
+                                            selectedDate === item.value && { backgroundColor: theme.primary + '15' }
+                                        ]}
+                                        onPress={() => {
+                                            setSelectedDate(item.value);
+                                            AsyncStorage.setItem('@gomla_dashboard_date', item.value).catch(() => {});
+                                            setDateModalVisible(false);
+                                            loadUserAndRecent(item.value);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.dateOptionText, 
+                                            { color: selectedDate === item.value ? theme.primary : theme.text },
+                                            selectedDate === item.value && { fontWeight: 'bold' }
+                                        ]}>
+                                            {item.label}
+                                        </Text>
+                                        {selectedDate === item.value && (
+                                            <Ionicons name="checkmark-circle" size={20} color={theme.primary} />
+                                        )}
+                                    </TouchableOpacity>
+                                )}
+                            />
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        </View>
     );
 }
 
@@ -396,42 +590,27 @@ const styles = StyleSheet.create({
     searchBox: {
         flexDirection: 'row-reverse',
         alignItems: 'center',
-        borderWidth: 1,
-        borderRadius: 14,
-        paddingHorizontal: 8,
-        height: 58,
-        elevation: 6,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
-        shadowRadius: 10,
+        borderWidth: 1.5,
+        borderRadius: 20,
+        paddingHorizontal: 16,
+        height: 60,
     },
     input: {
         flex: 1,
-        paddingHorizontal: 12,
+        paddingHorizontal: 16,
         height: '100%',
-        fontSize: 16,
+        fontSize: 17,
+        fontWeight: '600',
         textAlign: 'right',
     },
-    searchIconBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 8,
-    },
-    searchBtn: {
-        width: 44,
-        height: 44,
-        borderRadius: 10,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginLeft: 4,
+    clearBtn: {
+        padding: 5,
+        marginHorizontal: 5,
     },
     balanceCard: {
         marginHorizontal: '5%',
         borderRadius: 24,
-        height: 145,
+        minHeight: 190,
         position: 'relative',
         overflow: 'hidden',
         marginBottom: 20,
@@ -617,5 +796,45 @@ const styles = StyleSheet.create({
     recentInvoicesPlaceholderText: {
         fontSize: 13,
         fontWeight: '600',
+    },
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
+    },
+    modalContent: {
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        borderWidth: 1,
+        borderBottomWidth: 0,
+        height: '60%',
+        padding: 20,
+    },
+    modalHeader: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    modalTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    modalSubtitle: {
+        fontSize: 14,
+        textAlign: 'right',
+        marginBottom: 10,
+    },
+    dateOptionBtn: {
+        flexDirection: 'row-reverse',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 16,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderRadius: 8,
+    },
+    dateOptionText: {
+        fontSize: 16,
     },
 });

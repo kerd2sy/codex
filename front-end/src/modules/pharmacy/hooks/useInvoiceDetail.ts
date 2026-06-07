@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiFetch, API_ENDPOINTS } from '@/api/api-client';
+import { InvoiceRepository } from '../utils/InvoiceRepository';
 import { PharmacyVault } from '../utils/vault';
 
 export type InvoiceType = 'purchase' | 'sales' | 'return';
@@ -16,23 +17,65 @@ export const useInvoiceDetail = ({ type, id }: UseInvoiceDetailOptions) => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    const fetchDetails = useCallback(async (isInitial = false) => {
+    const moduleMap: Record<InvoiceType, string> = {
+        'purchase': 'purchases',
+        'sales': 'sales',
+        'return': 'returns'
+    };
+    const moduleName = moduleMap[type] || 'purchases';
+
+    const fetchDetails = useCallback(async (isInitial = false, forceRefresh = false) => {
         try {
             const activePharmId = await AsyncStorage.getItem('@active_pharmacy_id');
             const pharmId = activePharmId || '0';
             
-            // 1. Try Vault Cache for instant display
-            const cached = await PharmacyVault.get(pharmId, 'details', id);
-            if (cached) {
-                setDetails(cached.details);
-                setItems(cached.items || []);
-                setLoading(false);
-            } else if (isInitial) {
-                // Only show loading spinner if we have NOTHING cached
-                setLoading(true);
+            // 1. Instant load from SQLite (if it exists from the mass sync)
+            let cached = InvoiceRepository.getById(pharmId, moduleName, id);
+            
+            // Fallback to Vault if SQLite is dead
+            if (!cached) {
+                const vaultCached = await PharmacyVault.get<any>(pharmId, 'details' as any, id);
+                if (vaultCached) {
+                    cached = vaultCached;
+                }
             }
 
-            // 2. Fetch fresh data in background
+            let hasValidItems = false;
+            
+            if (cached && (cached.items || cached.details || Array.isArray(cached))) {
+                // If it already has items structure mapped
+                if (cached.items) {
+                    setDetails(cached.details || cached);
+                    setItems(cached.items || []);
+                    if (cached.items.length > 0) hasValidItems = true;
+                } else if (Array.isArray(cached)) {
+                    setDetails(cached[0] || {});
+                    setItems(cached);
+                    if (cached.length > 0) hasValidItems = true;
+                } else {
+                    // Fallback just in case
+                    setDetails(cached.details || cached);
+                    if (cached.itemsList) {
+                        setItems(cached.itemsList);
+                        if (cached.itemsList.length > 0) hasValidItems = true;
+                    }
+                }
+                setLoading(false);
+            } else if (cached) {
+                setDetails(cached);
+                setItems(cached.items || cached.itemsList || []);
+                if ((cached.items && cached.items.length > 0) || (cached.itemsList && cached.itemsList.length > 0)) hasValidItems = true;
+                if (isInitial && !hasValidItems) setLoading(true);
+            } else if (isInitial) {
+                setLoading(true);
+            }
+            
+            // If we have items locally and user didn't explicitly request a refresh, skip API fetch
+            if (hasValidItems && !forceRefresh) {
+                return;
+            }
+
+            // 2. Fetch fresh details from API
             const endpoint = API_ENDPOINTS.PURCHASES.DETAIL(id);
             if (!endpoint) return;
 
@@ -52,11 +95,16 @@ export const useInvoiceDetail = ({ type, id }: UseInvoiceDetailOptions) => {
                 setDetails(resultDetails);
                 setItems(resultItems);
                 
-                // Update Vault for next time
-                await PharmacyVault.set(pharmId, 'details', id, {
+                const finalPayload = {
                     details: resultDetails,
                     items: resultItems
-                });
+                };
+                
+                // Save fully detailed payload back into SQLite
+                InvoiceRepository.saveDetails(pharmId, moduleName, id, finalPayload);
+                
+                // ALSO save to Vault for redundancy (works even if SQLite crashes)
+                await PharmacyVault.set(pharmId, 'details' as any, id, finalPayload);
             } else if (!cached) {
                 setError('Failed to fetch details');
             }
@@ -71,5 +119,5 @@ export const useInvoiceDetail = ({ type, id }: UseInvoiceDetailOptions) => {
         if (id) fetchDetails(true);
     }, [id]);
 
-    return { details, items, loading, error, refresh: () => fetchDetails(false) };
+    return { details, items, loading, error, refresh: () => fetchDetails(false, true) };
 };

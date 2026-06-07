@@ -2,11 +2,14 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { Colors } from '@/core/theme';
 import { useTheme } from '@/context/ThemeContext';
+import { Ionicons } from '@expo/vector-icons';
 
 interface Category {
   id: string;
   title: string;
-  icon: any;
+  iconName?: any;
+  imageSource?: any;
+  color?: string;
 }
 
 interface CategoryGridProps {
@@ -28,7 +31,11 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({ categories, onCatego
           onPress={() => onCategoryPress(cat)}
         >
           <View style={[styles.catImageContainer, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <Image source={cat.icon} style={styles.catImageLarge} />
+            {cat.imageSource ? (
+              <Image source={cat.imageSource} style={styles.catImageLarge} />
+            ) : (
+              <Ionicons name={cat.iconName} size={32} color={cat.color || theme.primary} />
+            )}
           </View>
           <Text style={[styles.categoryTextLarge, { color: theme.primary }]}>{cat.title}</Text>
         </TouchableOpacity>
@@ -42,12 +49,15 @@ const styles = StyleSheet.create({
     marginHorizontal: '5%',
     paddingBottom: 24,
     flexDirection: 'row-reverse',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+    flexWrap: 'wrap',
+    gap: 12,
   },
   categoryCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: '23%',
+    width: '22%',
+    marginBottom: 16,
   },
   catImageContainer: {
     width: 70,

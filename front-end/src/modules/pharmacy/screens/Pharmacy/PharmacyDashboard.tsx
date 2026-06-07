@@ -19,9 +19,10 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import { useLocationUpdate } from '../../hooks/useLocationUpdate';
 import { 
     BalanceCard, CategoryGrid, RecentProductCard,
-    DashboardHeader, DashboardSearch, PharmacySwitchModal,
+    DashboardSearch, PharmacySwitchModal,
     SmallOrderCard, VerificationBanner, UpdateBanner
 } from '../../components';
+import { DashboardHeader } from '@/ui/shared/DashboardHeader';
 import { useOrders } from '../../hooks/useOrders';
 import { getEffectiveDiscount } from '@/utils/product-utils';
 import BarcodeScannerModal from '../../../../ui/shared/BarcodeScannerModal';
@@ -33,10 +34,10 @@ import { DashboardSkeleton } from '../../../../ui/core/skeletons/DashboardSkelet
 
 // Using @/assets alias
 const CATEGORIES = [
-    { id: '1', title: 'المشتريات', icon: require('@/assets/images/category_purchases.png') },
-    { id: '2', title: 'المرتجعات', icon: require('@/assets/images/category_returns.png') },
-    { id: '3', title: 'النقدية', icon: require('@/assets/images/category_cash.png') },
-    { id: '4', title: 'المبيعات', icon: require('@/assets/images/category_sales.png') },
+    { id: '1', title: 'المشتريات', imageSource: require('@/assets/images/category_purchases.png') },
+    { id: '2', title: 'المرتجعات', imageSource: require('@/assets/images/category_returns.png') },
+    { id: '3', title: 'النقدية', imageSource: require('@/assets/images/category_cash.png') },
+    { id: '4', title: 'المبيعات', imageSource: require('@/assets/images/category_sales.png') },
 ];
 
 export const PharmacyDashboard = () => {
@@ -210,6 +211,7 @@ export const PharmacyDashboard = () => {
             >
                 <VerificationBanner currentUser={currentUser} colorScheme={colorScheme} />
                 <UpdateBanner updateAvailable={updateAvailable} colorScheme={colorScheme} />
+
 
 
                 <DashboardSearch 

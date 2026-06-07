@@ -33,7 +33,8 @@ import { pdfGenerator } from '../src/modules/pharmacy/utils/pdf-generator';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { storage } from '../src/shared/utils/storage';
 import { ErrorBoundary } from '../src/shared/components/ErrorBoundary';
-
+import { DatabaseManager } from '../src/modules/pharmacy/utils/database';
+import { BackgroundSyncManager } from '../src/modules/pharmacy/utils/BackgroundSyncManager';
 
 // Suppress annoying development warnings
 LogBox.ignoreLogs([
@@ -57,6 +58,13 @@ function RootLayoutContent() {
 
   // Root Notifications Logic
   usePushNotifications();
+  
+  useEffect(() => {
+    DatabaseManager.init();
+    
+    // Start background sync for offline items
+    BackgroundSyncManager.start();
+  }, []);
   
   // App Update Logic
   const { 
@@ -166,6 +174,8 @@ function RootLayoutContent() {
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />
             <Stack.Screen name="(pharmacy)" options={{ headerShown: false }} />
             <Stack.Screen name="(gomla)" options={{ headerShown: false }} />
+            <Stack.Screen name="(admin)" options={{ headerShown: false }} />
+            <Stack.Screen name="(employee)" options={{ headerShown: false }} />
           </Stack>
           <StatusBar 
             style={colorScheme === 'dark' ? 'light' : 'dark'} 

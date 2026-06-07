@@ -2,7 +2,7 @@
   "expo": {
     "name": "تبارك فارما",
     "slug": "tabarak-pharma",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "tabarakpharma",
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.tabarak.pharma",
-      "versionCode": 9,
+      "versionCode": 11,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -57,7 +57,9 @@
           ]
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -78,7 +80,8 @@
       "policy": "appVersion"
     },
     "updates": {
-      "enabled": true
+      "enabled": true,
+      "url": "https://u.expo.dev/d2b2ec00-ae92-4b46-8abf-23f804db046f"
     }
   }
 }

@@ -12,9 +12,14 @@ export interface User {
   provider?: 'email' | 'google' | 'facebook';
   is_email_verified: boolean;
   can_create_invoice: boolean;
+  can_access_employee?: boolean;
+  can_access_reviewer?: boolean; // keeping for backward compatibility
+  employee_id?: number;
+  employee_role?: string;
   token_version: number;
   fcm_token?: string;
   expo_push_token?: string;
+  roles?: string[];
   pharmacies?: Pharmacy[];
 }
 
@@ -26,11 +31,10 @@ export interface AuthResponse {
 
 export interface Pharmacy {
   id: number;
-  name: string;
-  code: string;
-  address?: string;
-  phone?: string;
-  phone2?: string;
+    username: string;
+    manager_phone?: string;
+    avatar_url?: string;
+    email: string;
   location_url?: string;
   kind?: number;
   tier?: number;
