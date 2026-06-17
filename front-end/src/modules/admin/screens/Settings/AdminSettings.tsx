@@ -64,7 +64,7 @@ export const AdminSettings = () => {
             user={user}
             loading={loading}
             menuGroups={MENU_GROUPS}
-            versionText="تبارك فارما - الإصدار 2.4.0 (الإدارة)"
+            versionText="تبارك فارما - الإصدار 1.0.0 (الإدارة)"
             showProfileCard={true}
             roleBadgeText="مدير النظام (Admin)"
             onLogout={logout}

@@ -77,35 +77,29 @@ export default function Index() {
                             }
 
                             const user = JSON.parse(userJson);
-                            if (user?.roles && user.roles.length > 0) {
-                                let targetRoute = '/(auth)/login';
-                                const empRole = user.employee_role || '';
-                                const userRoles = user.roles || [];
+                            let targetRoute = '/(auth)/login';
+                            const empRole = user.employee_role || '';
+                            const userRoles = user.roles || [];
 
-                                const hasRole = (role: string) => userRoles.includes(role) || empRole === role;
-                                
-                                if (hasRole('admin')) targetRoute = '/(admin)/dashboard';
-                                else if (hasRole('gomla')) targetRoute = '/(gomla)/dashboard';
-                                else if (hasRole('employee') || ['employee', 'reviewer', 'preparation', 'control', 'distribution'].some(hasRole)) targetRoute = '/(employee)/dashboard';
-                                else if (hasRole('pharmacist') || hasRole('pharmacy')) targetRoute = '/(pharmacy)';
+                            const hasRole = (role: string) => userRoles.includes(role) || empRole === role;
+                            
+                            if (hasRole('admin')) targetRoute = '/(admin)/dashboard';
+                            else if (hasRole('gomla')) targetRoute = '/(gomla)/dashboard';
+                            else if (hasRole('employee') || ['employee', 'reviewer', 'preparation', 'control', 'distribution'].some(hasRole)) targetRoute = '/(employee)/dashboard';
+                            else targetRoute = '/(pharmacy)';
 
-                                // Override based on the last visited dashboard if user has permissions
-                                if (lastGuard === 'reviewer' && (hasRole('admin') || user.can_access_reviewer || user.canAccessReviewer || ['employee', 'reviewer', 'preparation', 'control', 'distribution', 'gomla'].some(hasRole))) {
-                                    targetRoute = '/(employee)/dashboard';
-                                } else if (lastGuard === 'admin' && hasRole('admin')) {
-                                    targetRoute = '/(admin)/dashboard';
-                                } else if (lastGuard === 'gomla' && (hasRole('admin') || hasRole('gomla'))) {
-                                    targetRoute = '/(gomla)/dashboard';
-                                } else if (lastGuard === 'pharmacist' && (hasRole('admin') || hasRole('pharmacist') || hasRole('pharmacy'))) {
-                                    targetRoute = '/(pharmacy)';
-                                }
-
-                                router.replace(targetRoute as any);
-                            } else {
-                                console.log('[Init] Outdated session without roles. Clearing session.');
-                                await storage.deleteItem('user');
-                                await storage.deleteItem('access_token');
+                            // Override based on the last visited dashboard if user has permissions
+                            if (lastGuard === 'reviewer' && (hasRole('admin') || user.can_access_reviewer || user.canAccessReviewer || ['employee', 'reviewer', 'preparation', 'control', 'distribution', 'gomla'].some(hasRole))) {
+                                targetRoute = '/(employee)/dashboard';
+                            } else if (lastGuard === 'admin' && hasRole('admin')) {
+                                targetRoute = '/(admin)/dashboard';
+                            } else if (lastGuard === 'gomla' && (hasRole('admin') || hasRole('gomla'))) {
+                                targetRoute = '/(gomla)/dashboard';
+                            } else if (lastGuard === 'pharmacist' && (hasRole('admin') || hasRole('pharmacist') || hasRole('pharmacy'))) {
+                                targetRoute = '/(pharmacy)';
                             }
+
+                            router.replace(targetRoute as any);
                         } catch (innerError) {
                             console.error('[Init] Session restore failed:', innerError);
                         }

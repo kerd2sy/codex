@@ -7,14 +7,15 @@ import { Ionicons } from '@expo/vector-icons';
 import LottieView from 'lottie-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pharmacy } from '@/api/types';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface PharmacySwitchModalProps {
   isVisible: boolean;
   onClose: () => void;
-  pharmacies: Array<{ id: string | number; name: string }>;
-  onSwitch: (pharmacy: any) => void;
+  pharmacies: Pharmacy[];
+  onSwitch: (pharmacy: Pharmacy) => void;
   onAdd: () => void;
   theme: any;
   activePharmacyId: string;
@@ -107,7 +108,7 @@ export const PharmacySwitchModal = memo(({
                                         </View>
                                         <View style={styles.infoBox}>
                                             <Text style={[styles.pharmacyName, { color: textColor }, isActive && styles.activePharmacyName]}>
-                                                {item.name}
+                                                {item.username}
                                             </Text>
                                             <Text style={[styles.pharmacyRole, { color: subTextColor }]}>مدير الصيدلية</Text>
                                         </View>

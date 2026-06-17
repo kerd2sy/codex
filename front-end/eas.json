@@ -3,7 +3,10 @@
     "preview": {
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://apis.tabarak-pharma.com"
+        "EXPO_PUBLIC_API_URL": "https://apis.tabarak-pharma.com",
+        "EXPO_PUBLIC_ROBOFLOW_API_KEY": "bf45Inkgp524QzhP7fTt",
+        "EXPO_PUBLIC_ROBOFLOW_MODEL": "medicine_data_detection/3",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "704097706178-ke9jk5vn9p2862pg04535u8qm63fmfbp.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "apk"
@@ -19,7 +22,11 @@
     "production": {
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://apis.tabarak-pharma.com"
+        "EXPO_PUBLIC_API_URL": "https://apis.tabarak-pharma.com",
+        "NODE_OPTIONS": "--max-old-space-size=8192",
+        "EXPO_PUBLIC_ROBOFLOW_API_KEY": "bf45Inkgp524QzhP7fTt",
+        "EXPO_PUBLIC_ROBOFLOW_MODEL": "medicine_data_detection/3",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "704097706178-ke9jk5vn9p2862pg04535u8qm63fmfbp.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "apk"

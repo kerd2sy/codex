@@ -45,7 +45,7 @@ export const useLogin = (googleRef: React.RefObject<any>) => {
         if (GoogleSignin) {
             try {
                 GoogleSignin.configure({
-                    webClientId: '704097706178-enll3s6vpbcu10jivqskhrnb31nudpov.apps.googleusercontent.com',
+                    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || '704097706178-ke9jk5vn9p2862pg04535u8qm63fmfbp.apps.googleusercontent.com',
                     offlineAccess: true,
                 });
             } catch (err) {

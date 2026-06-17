@@ -1,4 +1,4 @@
-import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from '@react-navigation/native';
+import { DarkTheme, DefaultTheme, ThemeProvider as NavThemeProvider } from 'expo-router/react-navigation';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Dimensions, View, Text, StyleSheet, TextInput, Platform } from 'react-native';
@@ -81,7 +81,7 @@ function RootLayoutContent() {
   }, [updateAvailable, isUpdating, runUpdate]);
 
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: any;
     if (isUpdating) {
         // We keep it centered now, but set animationFinished after a delay
         // to ensure the user experiences the smooth animation.
@@ -143,14 +143,18 @@ function RootLayoutContent() {
           if (!active) return;
           // EDGE-TO-EDGE: In modern Expo, manual nav bar colors are unsupported/redundant. 
           // We rely on the theme and safe-area-context for a 10/10 premium look.
-          await NavigationBar.setButtonStyleAsync(btnStyle).catch(() => {});
-          await NavigationBar.setVisibilityAsync('visible').catch(() => {});
-          
-          setTimeout(async () => {
-             if (active) {
-                await NavigationBar.setButtonStyleAsync(btnStyle).catch(() => {});
-             }
-          }, 300);
+          if (NavigationBar && typeof NavigationBar.setButtonStyleAsync === 'function') {
+              await NavigationBar.setButtonStyleAsync(btnStyle).catch(() => {});
+              if (typeof NavigationBar.setVisibilityAsync === 'function') {
+                  await NavigationBar.setVisibilityAsync('visible').catch(() => {});
+              }
+              
+              setTimeout(async () => {
+                 if (active) {
+                    await NavigationBar.setButtonStyleAsync(btnStyle).catch(() => {});
+                 }
+              }, 300);
+          }
         } catch (e) {
           console.error('NavigationBar setup failed:', e);
         }
@@ -179,6 +183,7 @@ function RootLayoutContent() {
           </Stack>
           <StatusBar 
             style={colorScheme === 'dark' ? 'light' : 'dark'} 
+            // @ts-ignore
             backgroundColor={colorScheme === 'dark' ? '#121212' : '#FFFFFF'} 
             translucent={false} 
           />
@@ -186,7 +191,7 @@ function RootLayoutContent() {
 
         {/* Full Screen Update Progress Overlay */}
         {isUpdating && (
-          <View style={StyleSheet.absoluteFillObject}>
+          <View style={StyleSheet.absoluteFill}>
              <View style={[styles.updateOverlay, { backgroundColor: theme.background }]}>
                 <View style={[styles.animationBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                   <LottieView 

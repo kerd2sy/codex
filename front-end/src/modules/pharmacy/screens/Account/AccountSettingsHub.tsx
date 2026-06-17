@@ -30,13 +30,28 @@ export const AccountSettingsHub = () => {
         else if (res.error) setStatus({ visible: true, type: 'error', title: 'تنبيه', message: res.error });
     };
 
+    const segments = useSegments();
+    const currentModule = segments[0] as string || '(pharmacy)';
+
+    const hasRole = (role: string) => {
+        if (!user) return false;
+        if (user.roles) {
+            return user.roles.some((r: any) => 
+                typeof r === 'string' ? r === role : r.name === role
+            );
+        }
+        return user.role === role;
+    };
+
     const MENU_GROUPS: SettingsMenuGroup[] = [
         {
             id: 'account',
             title: 'الحساب والملف الشخصي',
             items: [
-                { id: 'profile', title: 'بيانات الحساب', icon: 'person-outline', color: '#2196F3', route: '/(pharmacy)/profile/edit' },
-                { id: 'pharmacy', title: 'إعدادات الصيدلية', icon: 'business-outline', color: '#FF7E47', route: '/(pharmacy)/pharmacy-settings' },
+                { id: 'profile', title: 'بيانات الحساب', icon: 'person-outline', color: '#2196F3', route: `/${currentModule}/profile/edit` },
+                ...((hasRole('admin') || hasRole('pharmacist') || currentModule === '(pharmacy)') ? [
+                    { id: 'pharmacy', title: 'إعدادات الصيدلية', icon: 'business-outline', color: '#FF7E47', route: `/${currentModule}/pharmacy-settings` }
+                ] : []),
             ]
         },
         {
@@ -52,24 +67,11 @@ export const AccountSettingsHub = () => {
                     value: biometricEnabled, 
                     onValueChange: onToggleBio 
                 },
-                { id: 'password', title: 'تغيير كلمة المرور', icon: 'key-outline', color: '#607D8B', route: '/(pharmacy)/profile/change-password' },
-                { id: 'backup', title: 'النسخ الاحتياطي السحابي', icon: 'cloud-upload-outline', color: '#9C27B0', route: '/(pharmacy)/backup' },
+                { id: 'password', title: 'تغيير كلمة المرور', icon: 'key-outline', color: '#607D8B', route: `/${currentModule}/profile/change-password` },
+                { id: 'backup', title: 'النسخ الاحتياطي السحابي', icon: 'cloud-upload-outline', color: '#9C27B0', route: `/${currentModule}/backup` },
             ]
         },
     ];
-
-    const segments = useSegments();
-    const currentModule = segments[0] as string;
-
-    const hasRole = (role: string) => {
-        if (!user) return false;
-        if (user.roles) {
-            return user.roles.some((r: any) => 
-                typeof r === 'string' ? r === role : r.name === role
-            );
-        }
-        return user.role === role;
-    };
 
     // Check employee job title
     const empRole = user?.employee_role || '';
@@ -214,7 +216,7 @@ export const AccountSettingsHub = () => {
             headerAccentColor="#FF7E47"
             user={user}
             menuGroups={MENU_GROUPS}
-            versionText="تبارك فارما - الإصدار 2.4.0"
+            versionText="تبارك فارما - الإصدار 1.0.0"
             renderTopWidgets={renderTopWidgets}
             showProfileCard={false}
             statusModal={{

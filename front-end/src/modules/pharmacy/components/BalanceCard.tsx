@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   balanceOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(0,0,0,0.2)',
   },
   balanceContent: {

@@ -18,6 +18,8 @@ interface DashboardHeaderProps {
   onPressNotifications: () => void;
   title?: string;
   subtitle?: string;
+  firstName?: string;
+  rightIconName?: any;
 }
 
 import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
@@ -26,7 +28,7 @@ import NotificationJson from '@/assets/json/Notification.json';
 
 export const DashboardHeader = memo(({ 
   theme, insets, currentUser, selectedPharmacy, unreadCount, lastUpdated,
-  onPressSwitch, onPressProfile, onPressNotifications, title, subtitle
+  onPressSwitch, onPressProfile, onPressNotifications, title, subtitle, firstName, rightIconName
 }: DashboardHeaderProps) => {
 
   const formatLastSync = (ts: number | null) => {
@@ -94,7 +96,11 @@ export const DashboardHeader = memo(({
   const showChevron = !!onPressSwitch;
 
   return (
-    <View style={[styles.header, { paddingTop: insets.top + HEADER_TOP_GAP, height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP }]}>
+    <View style={[styles.header, { 
+        paddingTop: insets.top + HEADER_TOP_GAP, 
+        paddingBottom: 16,
+        height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP + 16 
+    }]}>
       <DashboardSwitcherModal 
           visible={isSwitcherVisible} 
           onClose={() => setIsSwitcherVisible(false)} 
@@ -105,7 +111,9 @@ export const DashboardHeader = memo(({
 
       <View style={styles.locationContainer}>
           <Text style={[styles.deliverToText, { color: theme.muted }]}>
-            {subtitle ? subtitle : (selectedPharmacy && selectedPharmacy.id !== '0' ? 'أنت تدير صيدلية' : 'مرحباً بك')}
+            {firstName ? (
+                <Text>مرحباً بك يا <Text style={{ color: theme.primary }}>{firstName}</Text></Text>
+            ) : subtitle ? subtitle : (selectedPharmacy && selectedPharmacy.id !== '0' ? 'أنت تدير صيدلية' : 'مرحباً بك')}
           </Text>
           <TouchableOpacity style={styles.locationRow} onPress={handleTitlePress} disabled={!showChevron} activeOpacity={showChevron ? 0.2 : 1}>
               <View style={{ alignItems: 'flex-end' }}>
@@ -126,14 +134,24 @@ export const DashboardHeader = memo(({
               )}
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.notifBtn} onPress={onPressNotifications}>
-              <LottieView
-                  key={`lottie-bell-${unreadCount}`}
-                  source={notificationSource}
-                  autoPlay={unreadCount > 0}
-                  loop={unreadCount > 0}
-                  style={styles.notifLottie}
-              />
+          <TouchableOpacity 
+              style={[
+                  styles.notifBtn, 
+                  rightIconName ? { backgroundColor: 'rgba(255, 152, 0, 0.15)', borderRadius: 22 } : {}
+              ]} 
+              onPress={onPressNotifications}
+          >
+              {rightIconName ? (
+                  <Ionicons name={rightIconName} size={24} color="#FF9800" />
+              ) : (
+                  <LottieView
+                      key={`lottie-bell-${unreadCount}`}
+                      source={notificationSource}
+                      autoPlay={unreadCount > 0}
+                      loop={unreadCount > 0}
+                      style={styles.notifLottie}
+                  />
+              )}
           </TouchableOpacity>
       </View>
     </View>
@@ -144,14 +162,14 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: '5%' },
 
   locationContainer: { flex: 1, alignItems: 'flex-end' },
-  deliverToText: { fontSize: 11, fontWeight: '600' },
+  deliverToText: { fontSize: 12, fontWeight: '600' },
   locationRow: { flexDirection: 'row-reverse', alignItems: 'center' },
   locationTitleRow: { flexDirection: 'row-reverse', alignItems: 'center' },
-  locationText: { fontSize: 14, fontWeight: '700' },
+  locationText: { fontSize: 16, fontWeight: '800' },
   titleLine: { width: 20, height: 3, borderRadius: 1.5, marginTop: 1 },
 
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  profileBtn: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  profileBtn: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', borderWidth: 2, borderColor: '#FF9800' },
   avatar: { width: '100%', height: '100%' },
   avatarLottie: { width: 44, height: 44 },
   notifBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },

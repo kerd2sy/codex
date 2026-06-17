@@ -79,6 +79,8 @@ export default function GomlaFollowupScreen() {
                     audit_status: inv.audit_status,
                     editing_by_name: inv.editing_by_name,
                     audited_by_name: inv.audited_by_name,
+                    editing_by_avatar: inv.editing_by_avatar,
+                    audited_by_avatar: inv.audited_by_avatar,
                 }));
                 
                 formatted.sort((a, b) => {
@@ -228,13 +230,6 @@ export default function GomlaFollowupScreen() {
                         </View>
                         <Text style={[styles.statValue, { color: theme.text }]}>{auditedInvoicesCount} <Text style={{fontSize: 14, color: theme.muted}}>/ {totalInvoices}</Text></Text>
                         <Text style={[styles.statLabel, { color: theme.muted }]}>الفواتير المنجزة</Text>
-                        
-                        <View style={[styles.progressBarBg, { backgroundColor: theme.border, marginTop: 10 }]}>
-                            <View style={[
-                                styles.progressBarFill, 
-                                { backgroundColor: theme.primary, width: totalInvoices > 0 ? `${(auditedInvoicesCount / totalInvoices) * 100}%` : '0%' }
-                            ]} />
-                        </View>
                     </View>
 
                     <View style={[styles.statBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -243,13 +238,6 @@ export default function GomlaFollowupScreen() {
                         </View>
                         <Text style={[styles.statValue, { color: theme.text }]}>{auditedItems} <Text style={{fontSize: 14, color: theme.muted}}>/ {totalItems}</Text></Text>
                         <Text style={[styles.statLabel, { color: theme.muted }]}>الأصناف المنجزة</Text>
-                        
-                        <View style={[styles.progressBarBg, { backgroundColor: theme.border, marginTop: 10 }]}>
-                            <View style={[
-                                styles.progressBarFill, 
-                                { backgroundColor: theme.success, width: totalItems > 0 ? `${(auditedItems / totalItems) * 100}%` : '0%' }
-                            ]} />
-                        </View>
                     </View>
                 </View>
 

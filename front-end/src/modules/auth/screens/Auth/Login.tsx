@@ -43,13 +43,6 @@ export const Login = () => {
                 console.log("[Login] Valid session found, redirecting to dashboard...");
                 const userData = JSON.parse(user);
                 
-                if (!userData.roles) {
-                    console.log("[Login] Outdated session without roles. Forcing re-login.");
-                    storage.deleteItem('user');
-                    storage.deleteItem('access_token');
-                    return;
-                }
-
                 const empRole = userData.employee_role || '';
                 const userRoles = userData.roles || [];
                 const hasRole = (role: string) => userRoles.includes(role) || empRole === role;
@@ -59,14 +52,7 @@ export const Login = () => {
                 else if (hasRole('employee') || ['employee', 'reviewer', 'preparation', 'control', 'distribution'].some(hasRole)) router.replace('/(employee)/dashboard');
                 else router.replace('/(pharmacy)');
             } else if (!user || !token) {
-                console.log("[Login] No session. Auto-login check:", hasLoggedOut !== 'true');
-                // Only trigger auto-google login if the user has NOT explicitly logged out (e.g. first run)
-                if (hasLoggedOut !== 'true') {
-                    setTimeout(() => { 
-                        console.log("[Login] Triggering auto-google login...");
-                        if (!loading) handleGoogleLogin(); 
-                    }, 1500);
-                }
+                console.log("[Login] No session. Manual login required.");
             }
         };
         checkAuth();

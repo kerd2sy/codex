@@ -135,7 +135,7 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({ visibl
                         barcodeScannerSettings={{
                             barcodeTypes: ["qr", "ean13", "ean8", "upc_e", "upc_a", "code128", "code39"],
                         }}
-                        style={StyleSheet.absoluteFillObject}
+                        style={StyleSheet.absoluteFill}
                     >
                         {/* Overlay with transparent hole */}
                         <View style={styles.overlayContainer}>
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#000',
     },
     overlayContainer: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
     },
     overlayTop: {
         flex: 1,

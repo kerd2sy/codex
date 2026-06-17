@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { apiFetch, API_ENDPOINTS } from '@/shared/api/api-client';
 import { storage } from '@/shared/utils/storage';
 import { Alert } from 'react-native';
@@ -68,10 +69,27 @@ export const useEditProfile = () => {
         try {
             let currentAvatarUrl = avatar;
             if (avatar?.startsWith('file://')) {
-                const formData = new FormData();
-                formData.append('file', { uri: avatar, name: 'avatar.jpg', type: 'image/jpeg' } as any);
-                const uploadRes = await apiFetch(API_ENDPOINTS.AUTH.AVATAR, { method: 'POST', body: formData });
-                if (uploadRes.ok) currentAvatarUrl = (await uploadRes.json()).avatar_url;
+                // Use expo-file-system to completely bypass React Native's buggy FormData implementation
+                const token = await storage.getItem('access_token');
+                const uploadUrl = `${API_ENDPOINTS.AUTH.AVATAR.startsWith('http') ? '' : process.env.EXPO_PUBLIC_API_URL || 'http://192.168.100.25:8080'}${API_ENDPOINTS.AUTH.AVATAR}`;
+                
+                try {
+                    const uploadRes = await FileSystem.uploadAsync(uploadUrl, avatar, {
+                        httpMethod: 'POST',
+                        uploadType: FileSystem.FileSystemUploadType.MULTIPART as any,
+                        fieldName: 'file',
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (uploadRes.status === 200) {
+                        currentAvatarUrl = JSON.parse(uploadRes.body).avatar_url;
+                    }
+                } catch (err) {
+                    console.error('File upload error:', err);
+                    return { error: 'فشل في رفع الصورة، يرجى المحاولة مرة أخرى' };
+                }
             }
 
             const res = await apiFetch(API_ENDPOINTS.AUTH.PROFILE, {

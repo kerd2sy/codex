@@ -14,7 +14,31 @@
       },
       "oauth_client": [
         {
-          "client_id": "704097706178-enll3s6vpbcu10jivqskhrnb31nudpov.apps.googleusercontent.com",
+          "client_id": "704097706178-4u4tpehcji2u8005sr9a6b5jr2q84p2k.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tabarak.pharma",
+            "certificate_hash": "f1f505c9865be1362031c00f8e9935aee0df588c"
+          }
+        },
+        {
+          "client_id": "704097706178-8e0rr8i573vsqejns9r69avr18advbvc.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tabarak.pharma",
+            "certificate_hash": "7fbb2259a9cfb0165028263ab0f8caf165647c0f"
+          }
+        },
+        {
+          "client_id": "704097706178-lhjmetqr71c62n1qjpsqke0v7re76aro.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.tabarak.pharma",
+            "certificate_hash": "884e8aaaa586b38825722c32a90bcaf824e30b4b"
+          }
+        },
+        {
+          "client_id": "704097706178-ke9jk5vn9p2862pg04535u8qm63fmfbp.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
@@ -25,7 +49,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "704097706178-enll3s6vpbcu10jivqskhrnb31nudpov.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

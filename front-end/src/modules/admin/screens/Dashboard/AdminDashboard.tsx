@@ -13,6 +13,7 @@ import { storage } from '@/utils/storage';
 import { useRouter } from '@/hooks/useRouter';
 import { useRoleGuard } from '@/shared/guards/useRoleGuard';
 import { CategoryGrid } from '../../../pharmacy/components/CategoryGrid';
+import { useNotifications } from '../../../pharmacy/hooks/useNotifications';
 
 const ADMIN_CATEGORIES = [
     { id: '1', title: 'التقارير', iconName: 'bar-chart', color: '#10B981' },
@@ -32,6 +33,8 @@ export const AdminDashboard = () => {
     const theme = Colors[colorScheme];
     const { loading: authLoading, authorized } = useRoleGuard('admin');
     const { stats, loading, refresh } = useAdminStats();
+    const { notifications } = useNotifications();
+    const unreadCount = notifications.filter(n => n.unread).length;
 
     const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -74,9 +77,9 @@ export const AdminDashboard = () => {
                 theme={theme}
                 insets={insets}
                 currentUser={currentUser}
-                unreadCount={stats?.pendingRequests || 0}
+                unreadCount={unreadCount}
                 onPressProfile={() => router.push('/(admin)/settings')}
-                onPressNotifications={() => {}}
+                onPressNotifications={() => router.push('/(admin)/notifications')}
                 title="لوحة الإدارة"
                 subtitle="مرحباً بك في"
             />

@@ -4,7 +4,7 @@ import { useRouter } from '@/hooks/useRouter';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '../../../../core/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 import LottieView from 'lottie-react-native';
 import { useNotifications } from '../../hooks/useNotifications';
 import { BaseScreen } from '../../components/BaseScreen';
@@ -107,7 +107,6 @@ export const Notifications = () => {
                             { color: theme.text + 'CC' },
                             !isUnread && { color: theme.muted + '99' }
                         ]}
-                        numberOfLines={3}
                     >
                         {item.description}
                     </Text>

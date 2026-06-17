@@ -19,14 +19,7 @@ export const useRoleGuard = (allowedRole: UserRole) => {
                     return;
                 }
                 const user = JSON.parse(userJson!);
-                const userRoles = user.roles;
-                if (!userRoles) {
-                    // Outdated session, no roles exist, force logout
-                    await storage.deleteItem('user');
-                    await storage.deleteItem('access_token');
-                    router.replace('/(auth)/login');
-                    return;
-                }
+                const userRoles = user.roles || [];
                 const empRole = user.employee_role || '';
 
                 // Role check: in roles array
@@ -49,15 +42,15 @@ export const useRoleGuard = (allowedRole: UserRole) => {
                     // Employee section: any employee (all job types including gomla)
                     authorized = isEmployee;
                 } else if (allowedRole === 'pharmacist') {
-                    authorized = hasRole('pharmacist');
+                    // Pharmacy is the default space, so anyone who isn't explicitly blocked can access it
+                    authorized = true;
                 }
 
                 if (authorized) {
                     setAuthorized(true);
                 } else {
                     // Redirect to the right dashboard (gomla workers go to employee first)
-                    if (hasRole('admin')) router.replace('/(admin)/dashboard');
-                    else if (isEmployee) router.replace('/(employee)/dashboard');
+                    if (isEmployee) router.replace('/(employee)/dashboard');
                     else router.replace('/(pharmacy)');
                 }
             } catch (error) {

@@ -29,7 +29,7 @@ export const StatCard = ({ title, value, icon, colors, style }: StatCardProps) =
                 colors={['rgba(255,255,255,0.3)', 'transparent']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 0.5, y: 1 }}
-                style={StyleSheet.absoluteFillObject}
+                style={StyleSheet.absoluteFill}
             />
 
             <View style={styles.content}>

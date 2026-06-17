@@ -35,74 +35,7 @@ class SyncManager {
     }
 
     private async updateNotification(db: any, isComplete = false) {
-        try {
-            if (Constants.executionEnvironment === 'storeClient' || Constants.appOwnership === 'expo') {
-                return; // Do not use native notifications in Expo Go
-            }
-            
-            // Require notifee dynamically to avoid crashing in Expo Go where it might not be linked properly if used immediately
-            const notifee = require('@notifee/react-native').default;
-            const { AndroidImportance } = require('@notifee/react-native');
-
-            const getCount = (query: string) => {
-                if (!db) return 0;
-                try {
-                    const res = db.getAllSync(query) as {c: number}[];
-                    return res[0]?.c || 0;
-                } catch(e) {
-                    return 0;
-                }
-            };
-
-            const purchasesCompleted = getCount(`SELECT COUNT(*) as c FROM invoices WHERE module = 'purchases' AND raw_data LIKE '%"items":[%'`);
-            const salesCompleted = getCount(`SELECT COUNT(*) as c FROM invoices WHERE module = 'sales' AND raw_data LIKE '%"items":[%'`);
-            
-            const purchasesTotal = getCount(`SELECT COUNT(*) as c FROM invoices WHERE module = 'purchases'`);
-            const salesTotal = getCount(`SELECT COUNT(*) as c FROM invoices WHERE module = 'sales'`);
-            
-            const total = purchasesTotal + salesTotal;
-            const completed = purchasesCompleted + salesCompleted;
-            
-            const isFinished = total > 0 && completed >= total;
-
-            const channelId = await notifee.createChannel({
-                id: 'sync_progress',
-                name: 'Sync Progress',
-                vibration: false,
-                importance: AndroidImportance.LOW,
-            });
-
-            if (isComplete || isFinished) {
-                await notifee.displayNotification({
-                    id: 'deep_sync_progress',
-                    title: '✅ اكتملت المزامنة بنجاح',
-                    body: `تم تجهيز ${completed} فاتورة للعمل بدون إنترنت`,
-                    android: {
-                        channelId,
-                        ongoing: false,
-                        autoCancel: true,
-                        progress: undefined,
-                    },
-                });
-            } else {
-                await notifee.displayNotification({
-                    id: 'deep_sync_progress',
-                    title: '🔄 جاري المزامنة للعمل بدون إنترنت',
-                    body: `المتبقي: ${total - completed} فاتورة (${completed}/${total})`,
-                    android: {
-                        channelId,
-                        ongoing: true,
-                        autoCancel: false,
-                        progress: {
-                            max: total || 100,
-                            current: completed,
-                        },
-                    },
-                });
-            }
-        } catch (err) {
-            console.log('[SyncManager] Failed to update notification', err);
-        }
+        // Sync progress notifications removed at user request
     }
 
     private async processQueue() {

@@ -149,14 +149,14 @@ export function useDashboardData() {
         
         setSelectedPharmacy({
           id: active.id.toString(),
-          name: active.name,
+          name: active.username,
           kind: active.kind || 4,
           tier: active.tier || 1
         });
 
         // Always ensure persistent storage is updated when we sync active pharmacy
         await AsyncStorage.setItem('@active_pharmacy_id', active.id.toString());
-        await AsyncStorage.setItem('@active_pharmacy_name', active.name);
+        await AsyncStorage.setItem('@active_pharmacy_name', active.username);
       };
       syncActive();
     }

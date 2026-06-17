@@ -118,6 +118,21 @@ export const fetchProductBatchHistory = async (prodId: string): Promise<{ batch:
     }
 };
 
+export const fetchProductStockBalance = async (prodId: string): Promise<any[]> => {
+    try {
+        const timestamp = new Date().getTime();
+        const res = await apiFetch(`/api/v1/gomla/product/${prodId}/stock?_t=${timestamp}`);
+        if (res.ok) {
+            const data = await res.json();
+            return data || [];
+        }
+        return [];
+    } catch (e) {
+        console.error("Failed to fetch product stock balance:", e);
+        return [];
+    }
+};
+
 export const updateInvoiceAuditStatus = async (invoiceId: string, status: 'editing' | 'audited' | 'clear'): Promise<boolean> => {
 	try {
 		const res = await apiFetch(`/api/v1/gomla/invoice/${invoiceId}/status`, {
@@ -130,3 +145,22 @@ export const updateInvoiceAuditStatus = async (invoiceId: string, status: 'editi
 		return false;
 	}
 };
+
+export const fetchTopPreparers = async (date?: string): Promise<any[]> => {
+    try {
+        const timestamp = new Date().getTime();
+        let url = `/api/v1/gomla/preparers?_t=${timestamp}`;
+        if (date) {
+            url += `&date=${date}`;
+        }
+        const res = await apiFetch(url);
+        if (!res.ok) {
+            throw new Error("Failed to fetch top preparers");
+        }
+        return await res.json();
+    } catch (error) {
+        console.error("fetchTopPreparers error:", error);
+        return [];
+    }
+};
+

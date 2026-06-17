@@ -32,7 +32,7 @@ export const VerifyEmail = () => {
     const inputRefs = useRef<Array<TextInput | null>>([]);
 
     useEffect(() => {
-        let interval: NodeJS.Timeout;
+        let interval: any;
         if (timer > 0) {
             interval = setInterval(() => setTimer(prev => prev - 1), 1000);
         }

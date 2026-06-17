@@ -22,12 +22,18 @@ export const useSystemBars = () => {
       const btnStyle = isDark ? 'light' : 'dark';
 
       // EDGE-TO-EDGE: Only manage button styles and visibility
-      await NavigationBar.setButtonStyleAsync(btnStyle).catch(() => {});
-      await NavigationBar.setVisibilityAsync('visible').catch(() => {});
+      if (typeof (NavigationBar as any).setStyle === 'function') {
+        (NavigationBar as any).setStyle(btnStyle);
+      }
+      if (typeof (NavigationBar as any).setHidden === 'function') {
+        (NavigationBar as any).setHidden(false);
+      }
 
       // 3. Re-enforce after a tiny delay to override system transitions or component mounts
-      setTimeout(async () => {
-         await NavigationBar.setButtonStyleAsync(btnStyle).catch(() => {});
+      setTimeout(() => {
+         if (typeof (NavigationBar as any).setStyle === 'function') {
+           (NavigationBar as any).setStyle(btnStyle);
+         }
       }, 100);
       
     } catch (e) {

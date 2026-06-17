@@ -343,7 +343,7 @@ const styles = StyleSheet.create({
         fontWeight: '600'
     },
     scannedSuccess: {
-        ...StyleSheet.absoluteFillObject,
+        ...StyleSheet.absoluteFill,
         backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center',
         alignItems: 'center',

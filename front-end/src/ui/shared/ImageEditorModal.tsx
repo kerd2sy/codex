@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   cropOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderWidth: 2,
     margin: 20,
   },

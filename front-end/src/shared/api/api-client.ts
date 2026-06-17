@@ -87,12 +87,28 @@ const onTokenRefreshed = (token: string) => {
   refreshSubscribers = [];
 };
 
+function decodeBase64(input: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  const str = input.replace(/=+$/, '');
+  let output = '';
+  for (let i = 0, bc = 0, bs = 0; i < str.length; i++) {
+    const char = str.charAt(i);
+    const idx = chars.indexOf(char);
+    if (idx === -1) continue;
+    bs = bc % 4 ? bs * 64 + idx : idx;
+    if (bc++ % 4) {
+      output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6)));
+    }
+  }
+  return output;
+}
+
 function isTokenExpired(token: string): boolean {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(
-      atob(base64)
+      decodeBase64(base64)
         .split('')
         .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
         .join('')
@@ -163,16 +179,31 @@ export async function apiFetch<T = any>(endpoint: string, options: RequestInit =
     ...(options.headers as Record<string, string>),
   };
   
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds max wait
+  
+  // Robust check for FormData to handle RN polyfills
+  const isFormData = options.body && (options.body instanceof FormData || (options.body as any)?.append !== undefined);
+
+  if (isFormData) {
+      delete headers['Content-Type'];
+  }
+  
   if (token && !isAuthEndpoint) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds max wait
-
   try {
     const url = endpoint.startsWith('http') ? endpoint : `${API_URL}${endpoint}`;
-    let response = await fetch(url, { ...options, headers, signal: controller.signal });
+    
+    // React Native's fetch polyfill crashes with "Unsupported FormDataPart implementation" 
+    // if AbortSignal is passed alongside a FormData body.
+    const fetchOptions = { ...options, headers };
+    if (!isFormData) {
+        (fetchOptions as any).signal = controller.signal;
+    }
+
+    let response = await fetch(url, fetchOptions);
     clearTimeout(timeoutId);
 
     if (response.status === 401 && !isAuthEndpoint) {

@@ -97,7 +97,7 @@ export const PharmacyDashboard = () => {
     const [isAccountModalVisible, setAccountModalVisible] = useState(false);
     
     const scrollY = useRef(new Animated.Value(0)).current;
-    const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const locationTimeoutRef = useRef<any>(null);
     const isNavigating = useRef(false);
 
 
@@ -125,12 +125,12 @@ export const PharmacyDashboard = () => {
     const handlePharmacySwitch = async (pharmacy: Pharmacy) => {
         setSelectedPharmacy({ 
             id: pharmacy.id.toString(), 
-            name: pharmacy.name,
+            name: pharmacy.username,
             kind: pharmacy.kind || 4,
             tier: pharmacy.tier || 1
         });
         await AsyncStorage.setItem('@active_pharmacy_id', pharmacy.id.toString());
-        await AsyncStorage.setItem('@active_pharmacy_name', pharmacy.name);
+        await AsyncStorage.setItem('@active_pharmacy_name', pharmacy.username);
         setAccountModalVisible(false);
     };
 
