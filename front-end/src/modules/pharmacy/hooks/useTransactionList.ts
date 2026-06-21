@@ -40,15 +40,8 @@ export const useTransactionList = ({ type }: UseTransactionListOptions) => {
             }
         };
         init();
-        
-        // Auto-refresh timer
-        const timer = setInterval(() => {
-            if (isMounted) fetchData(true, 1, sortAscending);
-        }, 30000);
-
         return () => {
             isMounted = false;
-            clearInterval(timer);
         };
     }, [type, sortAscending, fetchData]);
 

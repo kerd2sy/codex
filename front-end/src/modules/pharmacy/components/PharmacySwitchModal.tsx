@@ -99,18 +99,11 @@ export const PharmacySwitchModal = memo(({
                                     onPress={() => onSwitch(item)}
                                 >
                                     <View style={styles.cardLeft}>
-                                        <View style={[styles.iconBox, { backgroundColor: iconBoxBg }, isActive && styles.activeIconBox]}>
-                                            <Ionicons 
-                                                name={isActive ? "business" : "business-outline"} 
-                                                size={22} 
-                                                color={isActive ? "#FF7E47" : subTextColor} 
-                                            />
-                                        </View>
+
                                         <View style={styles.infoBox}>
                                             <Text style={[styles.pharmacyName, { color: textColor }, isActive && styles.activePharmacyName]}>
-                                                {item.username}
+                                                {item.username || item.name}
                                             </Text>
-                                            <Text style={[styles.pharmacyRole, { color: subTextColor }]}>مدير الصيدلية</Text>
                                         </View>
                                     </View>
                                     {isActive && (
@@ -139,7 +132,7 @@ export const PharmacySwitchModal = memo(({
                                 style={styles.promoBtn}
                             >
                                 <Ionicons name="add" size={24} color="#FFF" />
-                                <Text style={styles.promoBtnText}>إضافة صيدلية جديدة</Text>
+                                <Text style={styles.promoBtnText}>إضافة صيدلية</Text>
                             </LinearGradient>
                         </TouchableOpacity>
                     </View>

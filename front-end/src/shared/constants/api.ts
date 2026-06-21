@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
     LIST: '/api/v1/notifications/',
     UNREAD_COUNT: '/api/v1/notifications/unread-count',
     MARK_READ: (id: number | string) => `/api/v1/notifications/${id}/read`,
+    MARK_ALL_READ: '/api/v1/notifications/mark-all-read',
     CLEAR_ALL: '/api/v1/notifications/clear-all',
   },
   PRODUCTS: {

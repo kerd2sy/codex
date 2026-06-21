@@ -29,7 +29,7 @@
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "704097706178-ke9jk5vn9p2862pg04535u8qm63fmfbp.apps.googleusercontent.com"
       },
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       }
     }
   }

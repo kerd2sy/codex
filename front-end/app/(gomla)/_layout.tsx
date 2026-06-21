@@ -4,6 +4,7 @@ import { Stack } from 'expo-router';
 import React from 'react';
 import { Dimensions, View, ActivityIndicator } from 'react-native';
 import { useRoleGuard } from '../../src/shared/guards/useRoleGuard';
+import { Loader } from '../../src/ui/shared/Loader';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TOP_GAP = SCREEN_HEIGHT * 0.02;
@@ -18,7 +19,7 @@ export default function GomlaLayout() {
     if (loading || !authorized) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background }}>
-                <ActivityIndicator size="large" color={theme.primary} />
+                <Loader />
             </View>
         );
     }

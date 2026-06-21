@@ -14,7 +14,7 @@ export const Notifications = () => {
     const router = useRouter();
     const { colorScheme } = useTheme();
     const theme = Colors[colorScheme];
-    const { notifications, loading, markRead, clearAll, refetch, clearBadge } = useNotifications();
+    const { notifications, loading, markRead, markAllRead, clearAll, refetch, clearBadge } = useNotifications();
     const [refreshing, setRefreshing] = useState(false);
     const trashRef = useRef<LottieView>(null);
 
@@ -38,8 +38,16 @@ export const Notifications = () => {
         trashRef.current?.play();
         setTimeout(async () => {
             await clearAll();
-            router.push('/(pharmacy)/dashboard' as any);
+            if (router.canGoBack()) {
+                router.back();
+            } else {
+                router.push('/' as any);
+            }
         }, 1200); 
+    };
+
+    const handleMarkAllRead = async () => {
+        await markAllRead();
     };
 
     const renderItem = ({ item }: any) => {
@@ -120,15 +128,20 @@ export const Notifications = () => {
             title="الإشعارات"
             scrollable={false}
             headerAction={
-                <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
-                    <LottieView 
-                        ref={trashRef}
-                        source={require('@/assets/json/Trash.json')}
-                        autoPlay={false}
-                        loop={false}
-                        style={styles.trashLottie}
-                    />
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity style={styles.clearBtn} onPress={handleMarkAllRead}>
+                        <Ionicons name="checkmark-done-circle-outline" size={28} color={theme.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.clearBtn} onPress={handleClearAll}>
+                        <LottieView 
+                            ref={trashRef}
+                            source={require('@/assets/json/Trash.json')}
+                            autoPlay={false}
+                            loop={false}
+                            style={styles.trashLottie}
+                        />
+                    </TouchableOpacity>
+                </View>
             }
         >
             <FlatList 
@@ -149,8 +162,8 @@ export const Notifications = () => {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.primary]} />}
                 ListEmptyComponent={!loading ? (
                     <View style={styles.empty}>
-                        <LottieView source={require('@/assets/json/EmptyNotifications.json')} autoPlay loop style={{ width: 280, height: 280 }} />
-                        <Text style={{ fontSize: 20, fontWeight: '800', color: theme.text }}>لا توجد إشعارات</Text>
+                        <LottieView source={require('@/assets/json/EmptyNotifications.json')} autoPlay loop style={{ width: 160, height: 160, marginBottom: 12 }} />
+                        <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text }}>لا توجد إشعارات</Text>
                     </View>
                 ) : null} 
             />

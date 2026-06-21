@@ -24,9 +24,19 @@ export const InvoiceRepository = {
         try {
             db.withTransactionSync(() => {
                 const statement = db.prepareSync(`
-                    INSERT OR REPLACE INTO invoices 
+                    INSERT INTO invoices 
                     (id, pharmacy_id, module, type, date, time, title, amount, author, description, raw_data, updated_at) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id, pharmacy_id, module) DO UPDATE SET 
+                        type = excluded.type,
+                        date = excluded.date,
+                        time = excluded.time,
+                        title = excluded.title,
+                        amount = excluded.amount,
+                        author = excluded.author,
+                        description = excluded.description,
+                        raw_data = json_patch(invoices.raw_data, excluded.raw_data),
+                        updated_at = excluded.updated_at
                 `);
                 
                 for (const item of items) {

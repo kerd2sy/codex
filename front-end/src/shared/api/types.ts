@@ -31,7 +31,8 @@ export interface AuthResponse {
 
 export interface Pharmacy {
   id: number;
-    username: string;
+  name: string;
+  username?: string;
     manager_phone?: string;
     avatar_url?: string;
     email: string;

@@ -1,0 +1,1 @@
+package main; import (" fmt\; \strings\); func main() { d := \2026-02-28T00:00:00+02:00\; if strings.Contains(d, \T\) { d = strings.Split(d, \T\)[0] }; parts := strings.Split(d, \-\); if len(parts) == 3 && len(parts[0]) == 4 { fmt.Printf(\%s/%s/%s\, parts[2], parts[1], parts[0]) } else { fmt.Println(d) } }

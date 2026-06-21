@@ -24,11 +24,14 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
     // Keep stateRef in sync to avoid dependency loops
     stateRef.current = state;
 
-    const sanitizeItem = useCallback((item: any) => {
-        if (!item) return item;
+    const sanitizeItem = useCallback((rawItem: any) => {
+        if (!rawItem) return rawItem;
         
         // If already sanitized, return as is (id and amount are indicators)
-        if (item._isSanitized) return item;
+        if (rawItem._isSanitized) return rawItem;
+
+        // Gracefully handle `{ details, items }` payload from useInvoiceDetail
+        const item = rawItem.details ? { ...rawItem.details, items: rawItem.items } : rawItem;
 
         if (module === 'cash') {
             const isNullOrEmpty = (val: any) => val === null || val === undefined || val === 'null' || val === 'undefined';
@@ -86,6 +89,14 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
                 return;
             }
 
+            // Ensure we don't leak data from previous pharmacy
+            const globalState = usePharmacyStore.getState();
+            if (globalState.activePharmacyId !== pharmId) {
+                globalState.clearAll();
+                globalState.setActivePharmacy(pharmId, ''); // Store it to avoid loop
+            }
+
+            let loadedFromCache = false;
             // 1. Instant Cache Load from SQLite or Vault
             if (pageNum === 1 && currentState.data.length === 0) {
                 let localData = InvoiceRepository.getAll(pharmId, module, sortAscending);
@@ -101,17 +112,21 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
                 if (localData && localData.length > 0) {
                     const mappedLocal = localData.map(sanitizeItem);
                     store.setListData(module, mappedLocal, 'replace');
+                    loadedFromCache = true;
                     const cachedSync = await PharmacyVault.get(pharmId, 'sync', module);
                     if (cachedSync) store.setListLastUpdated(module, cachedSync);
                     store.setListLoading(module, false);
                 } else if (!isBackground) {
                     store.setListLoading(module, true);
                 }
+            } else if (!isBackground) {
+                store.setListLoading(module, true);
             }
 
-            // 2. Fetch Fresh Data (Background Sync)
+            // 2. Fetch Fresh Data (Paginated)
             const sortDir = sortAscending ? 'asc' : 'desc';
-            const res = await apiFetch(`${endpoint}?page=1&limit=50000&pharmacy_id=${pharmId}&sort=${sortDir}`);
+            const fetchLimit = 1000;
+            const res = await apiFetch(`${endpoint}?page=${pageNum}&limit=${fetchLimit}&pharmacy_id=${pharmId}&sort=${sortDir}`);
             
             if (requestTokenRef.current !== currentToken) return;
 
@@ -124,23 +139,28 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
                         const now = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
                         store.setListLastUpdated(module, now);
                         
-                        // Save to SQLite asynchronously (or sync, but don't block UI state on its success)
+                        // Save to SQLite asynchronously
                         InvoiceRepository.saveBatch(pharmId, module, mapped);
+                        PharmacyVault.set(pharmId, module as any, 'list', mapped);
                         
-                        // Wake up sync manager to sync the details of this new batch
-                        if (['purchases', 'sales', 'returns'].includes(module)) {
-                            BackgroundSyncManager.start();
+                        // Start silent background sync for the rest of the pages
+                        if (['purchases', 'sales', 'returns', 'cash'].includes(module)) {
+                            BackgroundSyncManager.startListSync(pharmId, module, endpoint);
                         }
                         
-                        // Use the mapped network data directly for the UI
-                        store.setListData(module, mapped, 'replace');
+                        if (currentState.data.length > 0 || loadedFromCache) {
+                            store.setListData(module, mapped, 'prepend');
+                        } else {
+                            store.setListData(module, mapped, 'replace');
+                        }
                         
                         // Update sync timestamp
                         await PharmacyVault.set(pharmId, 'sync', module, now);
                     } else {
-                        // Pagination logic removed since we fetch all, but keeping for compatibility
                         store.setListData(module, mapped, 'append');
                     }
+                    store.setListHasMore(module, rawData.length >= fetchLimit);
+                } else {
                     store.setListHasMore(module, false);
                 }
             }
@@ -155,9 +175,14 @@ export const useBaseFinancialList = ({ module, endpoint }: UseBaseListOptions) =
     }, [module, endpoint, sanitizeItem, store.setListData, store.setListLoading, store.setListLastUpdated, store.setListHasMore, store.setListRefreshing]);
 
     const loadMore = useCallback((sortAscending: boolean) => {
-        // No pagination needed anymore, as we sync all to SQLite
-        return;
-    }, []);
+        const globalState = usePharmacyStore.getState() as any;
+        const currentState = globalState[module];
+        if (!currentState.loading && currentState.hasMore) {
+            store.incrementPage(module);
+            const newPage = (usePharmacyStore.getState() as any)[module].page;
+            fetchData(false, newPage, sortAscending);
+        }
+    }, [module, store, fetchData]);
 
     return {
         data: state.data,

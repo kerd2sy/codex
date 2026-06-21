@@ -138,7 +138,11 @@ export const useOrders = (orderId?: string, pharmacyId?: string, noFilter: boole
         let isMounted = true;
         const init = async () => {
             const id = pharmacyId || await AsyncStorage.getItem('@active_pharmacy_id');
-            if (id && isMounted && dataLengthRef.current === 0) {
+            // Clear current orders to prevent showing previous pharmacy's data
+            store.setListData('orders', []);
+            setLoading(true);
+            
+            if (id && isMounted) {
                 const cached = await PharmacyVault.get<any[]>(id, 'orders', 'recent_orders');
                 if (cached && isMounted) {
                     store.setListData('orders', cached);

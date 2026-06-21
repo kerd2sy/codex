@@ -5,6 +5,7 @@ import { storage } from '@/utils/storage';
 import { apiFetch, API_ENDPOINTS } from '@/api/api-client';
 import { cacheManager } from '../utils/cache-manager';
 import { SyncController } from '../utils/sync-utils';
+import { DatabaseManager } from '../utils/database';
 
 export const useProfile = () => {
     const [user, setUser] = useState<any>(null);
@@ -53,7 +54,8 @@ export const useProfile = () => {
         const pharmKeys = allKeys.filter(k => 
             k.startsWith('@dashboard_cache') || 
             k === '@active_pharmacy_id' || 
-            k.startsWith('@dismissed_location')
+            k.startsWith('@dismissed_location') ||
+            k.startsWith('@vault:')
         );
         
         await AsyncStorage.multiRemove([
@@ -66,8 +68,9 @@ export const useProfile = () => {
         // PURGE Namespaced Memory Caches for multi-user isolation
         cacheManager.clearAllMemoryCaches();
         
-        // 5. Stop all background sync tasks
+        // 5. Stop all background sync tasks and clear offline DB
         SyncController.resetSync();
+        DatabaseManager.clearAllData();
         
         await storage.setItem('user_has_logged_out', 'true');
         router.replace('/(auth)/login');

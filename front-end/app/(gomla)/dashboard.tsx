@@ -225,7 +225,7 @@ export default function GomlaDashboard() {
                     sections={[{ title: `فواتير يوم ${selectedDate}`, data: recentInvoices } as any]}
                     keyExtractor={(item: any) => item.id.toString()}
                     showsVerticalScrollIndicator={false}
-                    contentContainerStyle={{ paddingBottom: 40 }}
+                    contentContainerStyle={{ paddingBottom: 40, flexGrow: 1 }}
                     stickySectionHeadersEnabled={true}
                     refreshControl={
                         <RefreshControl 
@@ -440,7 +440,7 @@ export default function GomlaDashboard() {
                                             ) : (
                                                 <Ionicons name="person-circle" size={24} color={theme.primary} style={{ marginLeft: 6 }} />
                                             )}
-                                            <Text style={[styles.orderFooterValue, { color: theme.text, flexShrink: 1, fontSize: 13, fontWeight: '700' }]} numberOfLines={1}>
+                                            <Text style={[styles.orderFooterValue, { color: theme.text, flexShrink: 1, fontSize: 13, fontWeight: '700' }]}>
                                                 {item.audited_by_name || item.editing_by_name || 'غير محدد'}
                                             </Text>
                                         </View>

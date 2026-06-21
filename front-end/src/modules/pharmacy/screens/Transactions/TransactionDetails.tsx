@@ -37,8 +37,16 @@ export const TransactionDetails = ({
         const name = item.name || item.product_name || item.PRODUCT_NAME || item.item_name || item.p_name || 'صنف غير معروف';
         const qty = item.qty || item.quantity || item.QTY || item.items_qty || 0;
         const price = item.price || item.unit_price || item.PRICE || item.price_unit || 0;
-        const discount = item.discount || item.discount_value || item.DISCOUNT || 0;
-        const total = item.total || item.line_total || item.TOTAL || item.amount || (qty * price);
+        let discount = Number(item.discount || item.discount_value || item.DISCOUNT || 0);
+        const total = Number(item.total || item.line_total || item.TOTAL || item.amount || (qty * price));
+
+        // If backend discount is 0 but there is an actual discount in the total, calculate the percentage
+        if (discount === 0 && qty > 0 && price > 0 && total > 0) {
+            const expectedTotal = qty * price;
+            if (expectedTotal > total) {
+                discount = ((expectedTotal - total) / expectedTotal) * 100;
+            }
+        }
 
         return (
             <View style={[styles.itemCard, { backgroundColor: theme.surface }]}>
@@ -62,7 +70,7 @@ export const TransactionDetails = ({
                     </View>
                     <View style={styles.statCol}>
                         <Text style={[styles.statLabel, { color: '#FF5252', opacity: 0.8 }]}>الخصم</Text>
-                        <Text style={[styles.statValue, { color: '#FF5252' }]}>{Number(discount).toFixed(0)}</Text>
+                        <Text style={[styles.statValue, { color: '#FF5252' }]}>{discount.toFixed(0)}%</Text>
                     </View>
                     <View style={styles.statCol}>
                         <Text style={[styles.statLabel, { color: '#3F51B5', opacity: 0.8 }]}>الإجمالي</Text>
@@ -140,6 +148,19 @@ export const TransactionDetails = ({
                                         </View>
                                         <Ionicons name="cash" size={20} color={displayColor} />
                                     </View>
+
+                                        <>
+                                            <View style={styles.sheetDivider} />
+                                            <View style={styles.infoRow}>
+                                                <View style={styles.infoTextGroup}>
+                                                    <Text style={[styles.infoLabel, { color: theme.muted }]}>الملحوظات</Text>
+                                                    <Text style={[styles.infoValue, { color: theme.text, fontSize: 13 }]} numberOfLines={3}>
+                                                        {details?.notes && details.notes !== '' ? details.notes : 'لا يوجد (فارغ)'}
+                                                    </Text>
+                                                </View>
+                                                <Ionicons name="chatbubble-ellipses" size={20} color={displayColor} />
+                                            </View>
+                                        </>
                                 </View>
                             </View>
 

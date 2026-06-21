@@ -176,6 +176,7 @@ export const TransactionsList = ({
             renderItem={renderItem}
             emptyText={emptyText}
             accentColor={isCash ? theme.success : accentColor}
+            disableIdSort={isCash}
         />
     );
 };

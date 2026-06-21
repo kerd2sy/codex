@@ -6,38 +6,17 @@ import { apiFetch, API_ENDPOINTS } from '@/api/api-client';
 import { getLocalNotifications, markLocalNotificationRead, clearAllLocalNotifications } from '@/lib/notifications';
 import { PharmacyVault } from '../utils/vault';
 
+import { useSegments } from 'expo-router';
+
 const Notifications = Constants.appOwnership === 'expo' ? null : require('expo-notifications');
 
 export const useNotifications = () => {
+    const segments = useSegments();
+    const appGuard = segments[0]?.replace(/[()]/g, '') || 'pharmacy'; // Extracts 'admin', 'pharmacy', 'gomla' etc.
+
     const [notifications, setNotifications] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const isFetchingRef = useRef(false);
-
-    const parseNotifyDate = (dStr: string, tStr?: string) => {
-        if (!dStr) return 0;
-        try {
-            let d = dStr.trim().replace(/\//g, '-');
-            const parts = d.split('-');
-            let isoDate = d;
-            if (parts.length === 3 && parts[0].length !== 4) {
-                isoDate = `${parts[2]}-${parts[1]}-${parts[0]}`;
-            }
-            let time = (tStr || '00:00').trim();
-            let hours = 0, minutes = 0;
-            const tMatch = time.match(/(\d+):(\d+)/);
-            if (tMatch) {
-                hours = parseInt(tMatch[1], 10);
-                minutes = parseInt(tMatch[2], 10);
-                const isPM = time.includes('م') || time.toLowerCase().includes('pm');
-                const isAM = time.includes('ص') || time.toLowerCase().includes('am');
-                if (isPM && hours < 12) hours += 12;
-                if (isAM && hours === 12) hours = 0;
-            }
-            const hStr = hours.toString().padStart(2, '0');
-            const mStr = minutes.toString().padStart(2, '0');
-            return new Date(`${isoDate}T${hStr}:${mStr}:00`).getTime() || 0;
-        } catch { return 0; }
-    };
 
     useEffect(() => {
         const loadInitial = async () => {
@@ -55,13 +34,15 @@ export const useNotifications = () => {
         if (!isBg) setLoading(true);
         try {
             isFetchingRef.current = true;
-            const res = await apiFetch(API_ENDPOINTS.NOTIFICATIONS.LIST);
+            // Add cache buster and app guard query params
+            const endpoint = `${API_ENDPOINTS.NOTIFICATIONS.LIST}?app=${appGuard}&_t=${Date.now()}`;
+            const res = await apiFetch(endpoint);
             if (res.ok) {
                 const data = await res.json();
-                const sorted = Array.isArray(data) ? data.sort((a, b) => parseNotifyDate(b.date, b.time) - parseNotifyDate(a.date, a.time)) : [];
+                const fetchedList = Array.isArray(data) ? data : [];
                 
                 // Filter zero value transactions
-                const filtered = sorted.filter((n: any) => {
+                const filtered = fetchedList.filter((n: any) => {
                     const desc = n.description || "";
                     const isZeroValue = /(^|\s)0(\.00)?(\s|$|ج\.م)/.test(desc);
                     return !isZeroValue;
@@ -141,5 +122,21 @@ export const useNotifications = () => {
         }
     };
 
-    return { notifications, loading, markRead, clearAll, refetch: fetchNotifications, clearBadge };
+    const markAllRead = async () => {
+        try {
+            await apiFetch(API_ENDPOINTS.NOTIFICATIONS.MARK_ALL_READ, { method: 'POST' });
+            setNotifications(prev => {
+                const updated = prev.map(n => ({ ...n, unread: false }));
+                AsyncStorage.getItem('@active_pharmacy_id').then(pharmId => {
+                    PharmacyVault.set(pharmId || 'global', 'notifications', 'cache', updated);
+                });
+                return updated;
+            });
+            clearBadge();
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    return { notifications, loading, markRead, markAllRead, clearAll, refetch: fetchNotifications, clearBadge };
 };

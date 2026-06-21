@@ -64,7 +64,7 @@ export const pharmacyApi = {
   },
 
   getStatement: async (pharmacyId: string, dateFrom: string): Promise<any[]> => {
-    const res = await apiFetch<any[]>(`${API_ENDPOINTS.PURCHASES.STATEMENT}?pharmacy_id=${pharmacyId}&date_from=${dateFrom}`);
+    const res = await apiFetch<any[]>(`${API_ENDPOINTS.PURCHASES.STATEMENT}?pharmacy_id=${pharmacyId}&date_from=${dateFrom}&limit=100000`);
     if (res.ok) {
       const data = await res.json();
       return Array.isArray(data) ? data : [];

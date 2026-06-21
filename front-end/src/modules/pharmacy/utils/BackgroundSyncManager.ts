@@ -11,6 +11,7 @@ class SyncManager {
     private isRunning = false;
     private hasCleanedUp = false;
     private unsubscribeNetInfo: (() => void) | null = null;
+    private listSyncRunning: Record<string, boolean> = {};
 
     constructor() {
         // Auto-resume when internet comes back
@@ -25,8 +26,8 @@ class SyncManager {
     async start() {
         if (this.isRunning) return;
         this.isRunning = true;
-        console.log('[SyncManager] 🔄 Starting Deep Sync...');
-        this.processQueue();
+        console.log('[SyncManager] 🛑 Deep Sync is disabled to prevent server overload.');
+        // this.processQueue();
     }
 
     stop() {
@@ -78,6 +79,7 @@ class SyncManager {
                 SELECT id, pharmacy_id, module FROM invoices 
                 WHERE raw_data NOT LIKE '%"items":[%' 
                 AND module IN ('purchases', 'sales', 'returns')
+                ORDER BY rowid ASC
                 LIMIT ?
             `, [BATCH_SIZE]) as {id: string, pharmacy_id: string, module: string}[];
 
@@ -110,21 +112,12 @@ class SyncManager {
                     const numericId = String(row.id).split('_').pop() || '';
                     const items = responseData[row.id] || responseData[numericId] || [];
                     
-                    let finalPayload: any = null;
-                    if (currentData.details) {
-                        currentData.items = items;
-                        finalPayload = currentData;
-                    } else {
-                        finalPayload = {
-                            details: currentData,
-                            items: items
-                        };
-                    }
+                    currentData.items = items;
                     
-                    InvoiceRepository.saveDetails(row.pharmacy_id, row.module, row.id, finalPayload);
+                    InvoiceRepository.saveDetails(row.pharmacy_id, row.module, row.id, currentData);
                     // Also save to Vault for redundancy
                     const PharmacyVault = require('./vault').PharmacyVault;
-                    PharmacyVault.set(row.pharmacy_id, 'details', row.id, finalPayload);
+                    PharmacyVault.set(row.pharmacy_id, 'details', row.id, currentData);
                 }
             }
 
@@ -146,6 +139,73 @@ class SyncManager {
             // Wait longer on error before retrying
             setTimeout(() => {
                 this.processQueue();
+            }, DELAY_MS * 3);
+        }
+    }
+
+    async prefetchFirstPage(pharmId: string, module: string, endpoint: string) {
+        // Only prefetch if we have no data
+        const localData = InvoiceRepository.getAll(pharmId, module, false);
+        if (localData && localData.length > 0) return;
+
+        try {
+            const res = await apiFetch(`${endpoint}?page=1&limit=1000&pharmacy_id=${pharmId}&sort=desc`);
+            if (res.ok) {
+                const rawData = await res.json();
+                if (Array.isArray(rawData) && rawData.length > 0) {
+                    InvoiceRepository.saveBatch(pharmId, module, rawData);
+                    console.log(`[SyncManager] 🚀 Prefetched page 1 for ${module} (Pharm ${pharmId})`);
+                }
+            }
+        } catch (error) {
+            // Silently ignore prefetch errors
+        }
+    }
+
+    async startListSync(pharmId: string, module: string, endpoint: string) {
+        const key = `${pharmId}_${module}`;
+        if (this.listSyncRunning[key]) return;
+        this.listSyncRunning[key] = true;
+        console.log(`[SyncManager] 🔄 Starting silent background list sync for ${module}...`);
+        
+        // Start from page 2, since page 1 is fetched by the UI
+        this.processListSync(pharmId, module, endpoint, 2);
+    }
+
+    private async processListSync(pharmId: string, module: string, endpoint: string, page: number) {
+        const key = `${pharmId}_${module}`;
+        if (!this.listSyncRunning[key]) return;
+
+        try {
+            const state = await NetInfo.fetch();
+            if (!state.isConnected) {
+                this.listSyncRunning[key] = false;
+                return;
+            }
+
+            const res = await apiFetch(`${endpoint}?page=${page}&limit=1000&pharmacy_id=${pharmId}&sort=desc`);
+            if (res.ok) {
+                const rawData = await res.json();
+                if (Array.isArray(rawData) && rawData.length > 0) {
+                    // Save raw data to SQLite (no sanitizeItem needed for SQLite)
+                    InvoiceRepository.saveBatch(pharmId, module, rawData);
+                    
+                    // Fetch next page after a short delay
+                    setTimeout(() => {
+                        this.processListSync(pharmId, module, endpoint, page + 1);
+                    }, DELAY_MS);
+                } else {
+                    console.log(`[SyncManager] ✅ Silent list sync complete for ${module}.`);
+                    this.listSyncRunning[key] = false;
+                }
+            } else {
+                this.listSyncRunning[key] = false;
+            }
+        } catch (error) {
+            console.error(`[SyncManager] ❌ List Sync Error for ${module}:`, error);
+            // Retry on error
+            setTimeout(() => {
+                this.processListSync(pharmId, module, endpoint, page);
             }, DELAY_MS * 3);
         }
     }

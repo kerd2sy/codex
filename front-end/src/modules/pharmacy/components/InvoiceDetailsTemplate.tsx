@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, 
   TouchableOpacity, ActivityIndicator, FlatList
 } from 'react-native';
+import LottieView from 'lottie-react-native';
 import { useRouter } from '@/hooks/useRouter';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '../../../core/theme';
@@ -23,6 +24,8 @@ interface InvoiceDetailsTemplateProps {
     footer?: React.ReactElement;
 }
 
+
+
 export const InvoiceDetailsTemplate = ({
     title, loading, details, items,
     renderHeaderInfo, renderItem,
@@ -35,8 +38,34 @@ export const InvoiceDetailsTemplate = ({
 
     if (loading && !details) {
         return (
-            <View style={[styles.center, { backgroundColor: theme.background }]}>
-                <ActivityIndicator size="large" color={accentColor} />
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
+                <View style={[
+                    styles.header, 
+                    { 
+                        paddingTop: insets.top + HEADER_TOP_GAP, 
+                        height: HEADER_CONTENT_HEIGHT + insets.top + HEADER_TOP_GAP,
+                        borderBottomWidth: 1,
+                        borderBottomColor: theme.border + '20'
+                    }
+                ]}>
+                    <View style={styles.headerRight}>
+                        <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
+                            <Ionicons name="chevron-forward" size={28} color={theme.primary} />
+                        </TouchableOpacity>
+                        <View style={styles.headerTitleContainer}>
+                            <Text style={[styles.title, { color: theme.primary }]}>{title}</Text>
+                            <View style={[styles.titleLine, { backgroundColor: '#FF7E47' }]} />
+                        </View>
+                    </View>
+                </View>
+                <View style={styles.center}>
+                    <LottieView
+                        source={require('../../../../assets/json/Loader.json')}
+                        autoPlay
+                        loop
+                        style={{ width: 200, height: 200 }}
+                    />
+                </View>
             </View>
         );
     }

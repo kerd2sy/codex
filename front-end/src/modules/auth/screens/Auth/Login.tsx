@@ -1,6 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import LottieView from 'lottie-react-native';
-import { View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Linking, Animated } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '@/core/theme';
 import { AuthContainer } from '@/ui/core/layout/AuthContainer';
@@ -11,6 +12,47 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLogin } from '../../hooks/useLogin';
 import { storage } from '@/utils/storage';
 import { useRouter } from '@/hooks/useRouter';
+
+const InlineTooltip = ({ text, visible, onNext, isTop = false, theme }: any) => {
+    const translateY = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        if (visible) {
+            Animated.loop(
+                Animated.sequence([
+                    Animated.timing(translateY, { toValue: isTop ? -5 : 5, duration: 500, useNativeDriver: true }),
+                    Animated.timing(translateY, { toValue: 0, duration: 500, useNativeDriver: true })
+                ])
+            ).start();
+        }
+    }, [visible]);
+
+    if (!visible) return null;
+    return (
+        <Animated.View style={[
+            styles.tooltipBox, 
+            { backgroundColor: theme.surface, transform: [{ translateY }] },
+            isTop ? { top: '100%', marginTop: 20 } : { bottom: '100%', marginBottom: 20 }
+        ]}>
+            {!isTop && (
+                <View style={{ position: 'absolute', bottom: -18 }}>
+                    <Ionicons name="arrow-down" size={24} color={theme.surface} />
+                </View>
+            )}
+            
+            {isTop && (
+                <View style={{ position: 'absolute', top: -18 }}>
+                    <Ionicons name="arrow-up" size={24} color={theme.surface} />
+                </View>
+            )}
+            
+            <Text style={[styles.tooltipText, { color: theme.text }]}>{text}</Text>
+            <TouchableOpacity onPress={onNext} style={[styles.tooltipBtn, { backgroundColor: theme.primary + '15' }]}>
+                <Text style={[styles.tooltipBtnText, { color: theme.primary }]}>حسناً، فهمت</Text>
+            </TouchableOpacity>
+        </Animated.View>
+    );
+};
 
 export const Login = () => {
     const { colorScheme } = useTheme();
@@ -28,6 +70,27 @@ export const Login = () => {
         handleLogin, handleGoogleLogin, handleBiometricLogin,
         processAuthUrl
     } = useLogin(googleRef);
+
+    const [tourStep, setTourStep] = useState(0);
+
+    useEffect(() => {
+        const checkTour = async () => {
+            const hasSeen = await AsyncStorage.getItem('@has_seen_login_tour');
+            if (hasSeen !== 'true') {
+                setTourStep(1);
+            }
+        };
+        checkTour();
+    }, []);
+
+    const nextTour = async () => {
+        if (tourStep === 1) {
+            setTourStep(2);
+        } else if (tourStep === 2) {
+            setTourStep(0);
+            await AsyncStorage.setItem('@has_seen_login_tour', 'true');
+        }
+    };
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -67,6 +130,18 @@ export const Login = () => {
     return (
         <AuthContainer title="تسجيل الدخول" subtitle="يرجى تسجيل الدخول إلى حسابك الحالي" showBack={false}>
             <View style={styles.form}>
+                {tourStep > 0 && (
+                    <TouchableOpacity 
+                        activeOpacity={1}
+                        style={{
+                            position: 'absolute',
+                            top: -2000, bottom: -2000, left: -1000, right: -1000,
+                            backgroundColor: 'rgba(0,0,0,0.75)',
+                            zIndex: 90
+                        }} 
+                    />
+                )}
+
                 <Input
                     ref={emailRef}
                     label="البريد الإلكتروني"
@@ -114,29 +189,53 @@ export const Login = () => {
                     )}
                 </View>
 
-                <View style={styles.footer}>
+                <View style={[
+                    styles.footer, 
+                    tourStep === 1 && { zIndex: 100, backgroundColor: theme.surface, padding: 10, borderRadius: 12 }
+                ]}>
                     <Text style={styles.footerText}>ليس لديك حساب؟</Text>
-                    <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-                        <Text style={styles.registerLink}> إنشاء حساب </Text>
-                    </TouchableOpacity>
+                    <View style={{ position: 'relative' }}>
+                        <TouchableOpacity onPress={() => router.push('/(auth)/register')} disabled={tourStep > 0}>
+                            <Text style={styles.registerLink}> إنشاء حساب </Text>
+                        </TouchableOpacity>
+                        <InlineTooltip 
+                            text="قم بإنشاء حساب جديد بواسطة الإيميل"
+                            visible={tourStep === 1}
+                            onNext={nextTour}
+                            isTop={false}
+                            theme={theme}
+                        />
+                    </View>
                 </View>
 
-                <View style={styles.googleSection}>
+                <View style={[
+                    styles.googleSection, 
+                    tourStep === 2 && { zIndex: 100, backgroundColor: theme.surface, paddingVertical: 15, borderRadius: 20 }
+                ]}>
                     <View style={styles.separatorRow}>
                         <View style={styles.line} /><Text style={styles.googleLabel}>الدخول بواسطة جوجل</Text><View style={styles.line} />
                     </View>
-                    <TouchableOpacity style={styles.googleBtn} activeOpacity={0.6} onPress={handleGoogleLogin}>
-                        <LottieView
-                            ref={googleRef}
-                            source={require('@/assets/json/RemixGoogleLogo.json')}
-                            autoPlay={false} 
-                            loop={false} 
-                            style={styles.googleAnim}
-                            onAnimationFinish={() => {
-                                googleRef.current?.reset();
-                            }}
+                    <View style={{ position: 'relative', alignItems: 'center' }}>
+                        <TouchableOpacity style={styles.googleBtn} activeOpacity={0.6} onPress={handleGoogleLogin} disabled={tourStep > 0}>
+                            <LottieView
+                                ref={googleRef}
+                                source={require('@/assets/json/RemixGoogleLogo.json')}
+                                autoPlay={false} 
+                                loop={false} 
+                                style={styles.googleAnim}
+                                onAnimationFinish={() => {
+                                    googleRef.current?.reset();
+                                }}
+                            />
+                        </TouchableOpacity>
+                        <InlineTooltip 
+                            text="أو الدخول مباشرة بواسطة جوجل، الأسهل والأسرع!"
+                            visible={tourStep === 2}
+                            onNext={nextTour}
+                            isTop={false}
+                            theme={theme}
                         />
-                    </TouchableOpacity>
+                    </View>
                 </View>
             </View>
 
@@ -166,6 +265,47 @@ const styles = StyleSheet.create({
     line: { flex: 1, height: 1, backgroundColor: '#F1F4F9' },
     googleLabel: { fontSize: 12, fontWeight: '800', color: '#BBB', marginHorizontal: 15, textAlign: 'center' },
     googleBtn: { width: 150, height: 150, marginTop: -35, marginBottom: -35, alignItems: 'center', justifyContent: 'center' },
-    googleAnim: { width: 150, height: 150 }
+    googleAnim: { width: 150, height: 150 },
+    tooltipBox: {
+        position: 'absolute',
+        width: 180,
+        borderRadius: 12,
+        padding: 12,
+        alignItems: 'center',
+        zIndex: 999,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+        alignSelf: 'center',
+    },
+    tooltipArrow: {
+        position: 'absolute',
+        width: 0,
+        height: 0,
+        borderLeftWidth: 8,
+        borderRightWidth: 8,
+        borderTopWidth: 8,
+        borderBottomWidth: 8,
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+    },
+    tooltipText: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginBottom: 10,
+        lineHeight: 20,
+    },
+    tooltipBtn: {
+        paddingVertical: 6,
+        paddingHorizontal: 16,
+        borderRadius: 8,
+    },
+    tooltipBtnText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+    }
 });
 

@@ -68,7 +68,7 @@ export const AccountSettingsHub = () => {
                     onValueChange: onToggleBio 
                 },
                 { id: 'password', title: 'تغيير كلمة المرور', icon: 'key-outline', color: '#607D8B', route: `/${currentModule}/profile/change-password` },
-                { id: 'backup', title: 'النسخ الاحتياطي السحابي', icon: 'cloud-upload-outline', color: '#9C27B0', route: `/${currentModule}/backup` },
+                // { id: 'backup', title: 'النسخ الاحتياطي السحابي', icon: 'cloud-upload-outline', color: '#9C27B0', route: `/${currentModule}/backup` },
             ]
         },
     ];

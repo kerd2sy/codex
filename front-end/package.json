@@ -44,6 +44,7 @@
     "expo-splash-screen": "~56.0.10",
     "expo-sqlite": "~56.0.5",
     "expo-status-bar": "~56.0.4",
+    "expo-store-review": "~56.0.3",
     "expo-system-ui": "~56.0.5",
     "expo-updates": "~56.0.19",
     "lottie-react-native": "~7.3.4",

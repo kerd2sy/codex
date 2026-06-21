@@ -58,5 +58,15 @@ export const DatabaseManager = {
             try { db.closeSync(); } catch(e) {}
             db = null;
         }
+    },
+    
+    clearAllData: () => {
+        if (!db) return;
+        try {
+            db.execSync('DELETE FROM invoices;');
+            console.log('[Database] 🗑️ All data cleared');
+        } catch (e) {
+            console.error('[Database] ❌ ClearAllData Error:', e);
+        }
     }
 };

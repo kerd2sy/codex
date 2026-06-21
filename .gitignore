@@ -2,7 +2,7 @@
 # SECRETS — NEVER COMMIT THESE
 # ============================================================
 # Old Python back-end (not for GitHub — contains secrets)
-back-end/
+# (Folder was removed/renamed)
 
 # Data/business files — not for GitHub
 dahab_store_*.md
@@ -23,13 +23,13 @@ serviceAccountKey.json
 *.mobileprovision
 
 # ============================================================
-# Go (back-end-go)
+# Go (back-end)
 # ============================================================
-back-end-go/*.exe
-back-end-go/main
-back-end-go/server
-back-end-go/scratch/
-back-end-go/vendor/
+back-end/*.exe
+back-end/main
+back-end/server
+back-end/scratch/
+back-end/vendor/
 *.exe
 *.out
 

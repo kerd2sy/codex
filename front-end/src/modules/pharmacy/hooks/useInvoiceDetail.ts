@@ -70,16 +70,17 @@ export const useInvoiceDetail = ({ type, id }: UseInvoiceDetailOptions) => {
                 setLoading(true);
             }
             
-            // If we have items locally and user didn't explicitly request a refresh, skip API fetch
+            // We have local data, so we don't need to block the UI (loading = false).
+            // But we will CONTINUE to fetch from API in the background to get fresh fields (like notes).
             if (hasValidItems && !forceRefresh) {
-                return;
+                // Just silently fetch without showing loading spinners again
             }
 
             // 2. Fetch fresh details from API
             const endpoint = API_ENDPOINTS.PURCHASES.DETAIL(id);
             if (!endpoint) return;
 
-            const res = await apiFetch(`${endpoint}?pharmacy_id=${pharmId}`);
+            const res = await apiFetch(`${endpoint}?pharmacy_id=${pharmId}&_t=${Date.now()}`);
             if (res.ok) {
                 const data = await res.json();
                 const resultDetails = Array.isArray(data) ? (data[0] || {}) : (data.details || data);
@@ -95,6 +96,8 @@ export const useInvoiceDetail = ({ type, id }: UseInvoiceDetailOptions) => {
                 setDetails(resultDetails);
                 setItems(resultItems);
                 
+                console.log("DEBUG INVOICE FETCH:", id, "Notes:", resultDetails?.notes, "Full Details:", resultDetails);
+                
                 const finalPayload = {
                     details: resultDetails,
                     items: resultItems
@@ -105,8 +108,10 @@ export const useInvoiceDetail = ({ type, id }: UseInvoiceDetailOptions) => {
                 
                 // ALSO save to Vault for redundancy (works even if SQLite crashes)
                 await PharmacyVault.set(pharmId, 'details' as any, id, finalPayload);
-            } else if (!cached) {
-                setError('Failed to fetch details');
+            } else {
+                const text = await res.text();
+                console.warn(`[InvoiceDetail] Fetch Failed! Status: ${res.status}. Body: ${text}`);
+                if (!cached) setError('Failed to fetch details');
             }
         } catch (e) {
             if (!details) setError(String(e));

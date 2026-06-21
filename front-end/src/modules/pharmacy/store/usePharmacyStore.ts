@@ -68,10 +68,20 @@ export const usePharmacyStore = create<PharmacyState>((set) => ({
       };
     }
     if (mode === 'prepend') {
+      const newIds = new Set(data.map(i => i.id));
+      // Update existing items in-place to keep their order
+      const updatedExisting = current.data.map(i => {
+        if (newIds.has(i.id)) {
+          return data.find(d => d.id === i.id) || i;
+        }
+        return i;
+      });
+      // Extract strictly new items
       const existingIds = new Set(current.data.map(i => i.id));
-      const filteredNew = data.filter(i => !existingIds.has(i.id));
+      const strictlyNew = data.filter(i => !existingIds.has(i.id));
+
       return {
-        [module]: { ...current, data: [...filteredNew, ...current.data].slice(0, 500) }
+        [module]: { ...current, data: [...strictlyNew, ...updatedExisting].slice(0, 500) }
       };
     }
     return {

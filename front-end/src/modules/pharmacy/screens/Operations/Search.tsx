@@ -47,7 +47,7 @@ export const Search = () => {
                 <Ionicons name="search-outline" size={20} color={theme.muted} />
                 <TextInput
                     style={[styles.input, { color: theme.text }]}
-                    placeholder="ابحث عن أدوية أو موردين..."
+                    placeholder="ابحث عن أدوية..."
                     placeholderTextColor={theme.muted}
                     value={searchText}
                     onChangeText={setSearchText}
@@ -117,7 +117,7 @@ export const Search = () => {
                         data={searchResults}
                         keyExtractor={(item, index) => item.id?.toString() || index.toString()}
                         numColumns={1}
-                        ListHeaderComponent={renderHeader}
+                        ListHeaderComponent={renderHeader()}
                         contentContainerStyle={styles.content}
                         renderItem={({ item }) => (
                             <ProductCard 
@@ -151,7 +151,7 @@ export const Search = () => {
 const styles = StyleSheet.create({
     headerContent: { paddingVertical: 20 },
     content: { paddingBottom: 40 },
-    mainContent: { flex: 1 },
+    mainContent: { flex: 1, paddingHorizontal: 20 },
     searchBox: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 15, height: 60, borderRadius: 20, borderWidth: 1, marginBottom: 20 },
     input: { flex: 1, height: '100%', fontSize: 15, paddingHorizontal: 10 },
     clearInputBtn: { padding: 5, marginHorizontal: 5 },

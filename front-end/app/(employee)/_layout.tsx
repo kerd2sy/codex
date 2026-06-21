@@ -3,6 +3,7 @@ import { View, ActivityIndicator, Dimensions } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { Colors } from '@/core/theme';
 import { useRoleGuard } from '@/shared/guards/useRoleGuard';
+import { Loader } from '@/ui/shared/Loader';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const TOP_GAP = SCREEN_HEIGHT * 0.02;
@@ -16,7 +17,7 @@ export default function EmployeeLayout() {
     if (loading || !authorized) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.background }}>
-                <ActivityIndicator size="large" color={theme.primary} />
+                <Loader />
             </View>
         );
     }

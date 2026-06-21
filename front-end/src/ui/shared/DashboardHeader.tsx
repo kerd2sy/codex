@@ -128,7 +128,7 @@ export const DashboardHeader = memo(({
       <View style={styles.headerRight}>
           <TouchableOpacity style={styles.profileBtn} onPress={onPressProfile}>
               {getAvatarUrl(currentUser?.avatar_url) ? (
-                  <Image source={{ uri: getAvatarUrl(currentUser?.avatar_url)! }} style={styles.avatar} />
+                  <Image source={{ uri: getAvatarUrl(currentUser?.avatar_url)! }} style={styles.avatar} resizeMode="cover" />
               ) : (
                   <LottieView source={require('@/assets/json/Profile.json')} autoPlay loop={false} style={styles.avatarLottie} />
               )}
@@ -169,9 +169,9 @@ const styles = StyleSheet.create({
   titleLine: { width: 20, height: 3, borderRadius: 1.5, marginTop: 1 },
 
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  profileBtn: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', borderWidth: 2, borderColor: '#FF9800' },
+  profileBtn: { width: 44, height: 44, borderRadius: 22, overflow: 'hidden', borderWidth: 2, borderColor: '#FF9800', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF' },
   avatar: { width: '100%', height: '100%' },
-  avatarLottie: { width: 44, height: 44 },
+  avatarLottie: { width: '100%', height: '100%', transform: [{ scale: 1.6 }] },
   notifBtn: { width: 44, height: 44, justifyContent: 'center', alignItems: 'center' },
   notifLottie: { width: 40, height: 40 },
 });

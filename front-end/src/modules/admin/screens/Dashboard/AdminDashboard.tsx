@@ -24,6 +24,7 @@ const ADMIN_CATEGORIES = [
     { id: '6', title: 'الأصناف', iconName: 'barcode', color: '#EC4899' },
     { id: '7', title: 'الموظفين', iconName: 'briefcase', color: '#6366F1' },
     { id: '8', title: 'المستخدمون', iconName: 'people-circle', color: '#14B8A6' },
+    { id: '9', title: 'إشعار جماعي', iconName: 'megaphone', color: '#F97316' },
 ];
 
 export const AdminDashboard = () => {
@@ -56,6 +57,7 @@ export const AdminDashboard = () => {
             '6': '/(admin)/product-coding',
             '7': '/(admin)/employees',
             '8': '/(admin)/users',
+            '9': '/(admin)/mass-notification',
         };
         const path = routes[cat.id];
         if (path) router.push(path as any);

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { 
   View, Text, TouchableOpacity, FlatList, 
   StyleSheet, Dimensions, Alert, Image,
-  RefreshControl, Platform
+  RefreshControl, Platform, ActivityIndicator
 } from 'react-native';
 import { useRouter } from '@/hooks/useRouter';
 import { Colors } from '../../../../core/theme';
@@ -26,6 +26,7 @@ const { width } = Dimensions.get('window');
 
 export const AccountStatement = () => {
     const [selectedPeriod, setSelectedPeriod] = useState(1);
+    const [isChangingPeriod, setIsChangingPeriod] = useState(false);
     const router = useRouter();
     const { colorScheme } = useTheme();
     const theme = Colors[colorScheme];
@@ -41,20 +42,25 @@ export const AccountStatement = () => {
 
     const { 
         statement, balance, pharmacyName, loading, 
-        refreshing, refresh 
+        refreshing, refresh, isFetching
     } = useAccountStatement(selectedPeriod);
 
-    const isInitialLoading = loading && statement.length === 0;
+    React.useEffect(() => {
+        if (!isFetching) {
+            setIsChangingPeriod(false);
+        }
+    }, [isFetching]);
+
+    const isInitialLoading = (loading && statement.length === 0) || isChangingPeriod;
 
     const sortedData = React.useMemo(() => {
-        return [...statement].sort((a, b) => {
-            const dtA = parseDateTime(a.date, a.time || a.TIME_T);
-            const dtB = parseDateTime(b.date, b.time || b.TIME_T);
-            if (dtA !== dtB) return sortAscending ? dtA - dtB : dtB - dtA;
-            const idA = parseInt(String(a.id || a.ID || a.serial || a.bill_id || 0).replace(/[^\d]/g, ''), 10) || 0;
-            const idB = parseInt(String(b.id || b.ID || b.serial || b.bill_id || 0).replace(/[^\d]/g, ''), 10) || 0;
-            return sortAscending ? idA - idB : idB - idA;
-        });
+        // Backend already sorts DESCENDING by date/time. 
+        // Reversing is O(N) and much faster than parsing dates and sorting O(N log N).
+        if (!statement || statement.length === 0) return [];
+        if (sortAscending) {
+            return [...statement].reverse();
+        }
+        return statement;
     }, [statement, sortAscending]);
 
     const handleDownload = async () => {
@@ -106,7 +112,7 @@ export const AccountStatement = () => {
                         if (isAnimationDone.current) setShowDownloadModal(true);
                     }
                 }} 
-                style={styles.downloadBtn}
+                style={[styles.downloadBtn, { display: 'none' }]}
             >
                 <LottieView
                     ref={lottieRef}
@@ -216,10 +222,15 @@ export const AccountStatement = () => {
                                         {[1, 2, 3].map(p => (
                                             <TouchableOpacity 
                                                 key={p}
-                                                onPress={() => setSelectedPeriod(p)} 
+                                                onPress={() => {
+                                                    if (p !== selectedPeriod) {
+                                                        setIsChangingPeriod(true);
+                                                        setSelectedPeriod(p);
+                                                    }
+                                                }} 
                                                 style={[styles.periodChip, { borderColor: theme.border }, selectedPeriod === p && { backgroundColor: theme.primary, borderColor: theme.primary }]}
                                             >
-                                                <Text style={[styles.periodText, { color: selectedPeriod === p ? '#FFF' : theme.text }]}>{p === 1 ? 'شهر' : p === 2 ? 'شهرين' : '3 شهور'}</Text>
+                                                <Text style={[styles.periodText, { color: selectedPeriod === p ? '#FFF' : theme.text, width: 40, textAlign: 'center' }]}>{p === 1 ? 'شهر' : p === 2 ? 'شهرين' : '3 شهور'}</Text>
                                             </TouchableOpacity>
                                         ))}
                                     </View>

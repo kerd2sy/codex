@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LottieView from 'lottie-react-native';
 import { FinancialCardSkeleton } from '@/ui/core/skeletons/FinancialCardSkeleton';
 import { HEADER_TOP_GAP, HEADER_CONTENT_HEIGHT } from '@/shared/constants/HeaderConstants';
+import { Loader } from '@/ui/shared/Loader';
 
 interface FinancialListTemplateProps {
     title: string;
@@ -25,12 +26,13 @@ interface FinancialListTemplateProps {
     renderItem: ({ item }: { item: any }) => React.ReactElement;
     emptyText?: string;
     accentColor: string;
+    disableIdSort?: boolean;
 }
 
 export const FinancialListTemplate = ({
     title, data, loading, refreshing, onRefresh, onLoadMore,
     isSyncing, isFetchingMore, renderItem, emptyText = 'لا توجد بيانات',
-    accentColor
+    accentColor, disableIdSort = false
 }: FinancialListTemplateProps) => {
     const router = useRouter();
     const insets = useSafeAreaInsets();
@@ -75,10 +77,20 @@ export const FinancialListTemplate = ({
             groups[monthKey].push(item);
         });
 
-        return Object.keys(groups).map(key => ({
-            title: key,
-            data: groups[key]
-        }));
+        return Object.keys(groups).map(key => {
+            const sortedData = disableIdSort 
+                ? groups[key] 
+                : groups[key].sort((a, b) => {
+                    const idA = parseInt(String(a.id).replace(/\D/g, ''), 10) || 0;
+                    const idB = parseInt(String(b.id).replace(/\D/g, ''), 10) || 0;
+                    return idB - idA;
+                });
+            
+            return {
+                title: key,
+                data: sortedData
+            };
+        });
     }, [data]);
 
     const sections = useMemo(() => {
@@ -86,10 +98,10 @@ export const FinancialListTemplate = ({
             return [{ title: 'جاري التحميل...', data: [1, 2, 3, 4], originalCount: 4, isCollapsed: false }];
         }
         return groupedData.map((group, index) => {
-            // Expand first month by default, collapse others
+            // Start all sections closed by default to show invoices faster
             const isCollapsed = collapsedSections[group.title] !== undefined 
                 ? collapsedSections[group.title] 
-                : index !== 0; 
+                : true; 
                 
             return {
                 title: group.title,
@@ -100,14 +112,53 @@ export const FinancialListTemplate = ({
         });
     }, [groupedData, collapsedSections, isInitialLoading]);
 
+    const sectionListRef = useRef<any>(null);
+
     const toggleSection = (sectionTitle: string) => {
+        let sectionIndexToScroll = -1;
+
+        // Configure LayoutAnimation to ONLY animate layout bounds (prevents color flashing "لسعة")
+        try {
+            const { LayoutAnimation, UIManager, Platform } = require('react-native');
+            if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+                UIManager.setLayoutAnimationEnabledExperimental(true);
+            }
+            LayoutAnimation.configureNext({
+                duration: 250,
+                update: { type: 'easeInEaseOut' }
+            });
+        } catch(e) {}
+
         setCollapsedSections(prev => {
-            const currentState = prev[sectionTitle] !== undefined ? prev[sectionTitle] : false; // false = expanded if first, but we need to track it properly. Wait, index 0 is expanded by default.
-            // If it's undefined, we need to know its index. 
-            // Better to just flip whatever it computes to.
             const isCurrentlyCollapsed = sections.find(s => s.title === sectionTitle)?.isCollapsed;
-            return { ...prev, [sectionTitle]: !isCurrentlyCollapsed };
+            const newIsCollapsed = !isCurrentlyCollapsed;
+            
+            if (newIsCollapsed === false) {
+                sectionIndexToScroll = sections.findIndex(s => s.title === sectionTitle);
+                const newState: Record<string, boolean> = {};
+                sections.forEach(s => {
+                    newState[s.title] = s.title === sectionTitle ? false : true;
+                });
+                return newState;
+            } else {
+                return { ...prev, [sectionTitle]: true };
+            }
         });
+
+        // Scroll gracefully AFTER the layout animation finishes
+        if (sectionIndexToScroll !== -1) {
+            setTimeout(() => {
+                try {
+                    sectionListRef.current?.scrollToLocation({
+                        animated: true,
+                        sectionIndex: sectionIndexToScroll,
+                        itemIndex: 0,
+                        viewPosition: 0,
+                        viewOffset: 10
+                    });
+                } catch (e) { }
+            }, 300);
+        }
     };
 
     useEffect(() => {
@@ -133,59 +184,86 @@ export const FinancialListTemplate = ({
                 </View>
             </View>
 
-            <SectionList
-                sections={sections}
-                keyExtractor={(item, idx) => isInitialLoading ? `sk-${idx}` : (item.id + idx)}
-                renderItem={isInitialLoading ? () => <FinancialCardSkeleton accentColor={accentColor} /> : renderItem}
-                renderSectionHeader={({ section }) => (
-                    <TouchableOpacity 
-                        style={[styles.sectionHeader, { backgroundColor: theme.surface, borderColor: theme.border }]} 
-                        onPress={() => toggleSection(section.title)}
-                        activeOpacity={0.7}
-                    >
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                            <Ionicons name="calendar" size={18} color={theme.primary} />
-                            <Text style={[styles.sectionTitle, { color: theme.text }]}>{section.title}</Text>
-                        </View>
-                        <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
-                            <View style={[styles.countBadge, { backgroundColor: theme.primary + '15' }]}>
-                                <Text style={[styles.countText, { color: theme.primary }]}>{section.originalCount}</Text>
+            {isInitialLoading ? (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    <Loader />
+                </View>
+            ) : (
+                <SectionList
+                    ref={sectionListRef}
+                    sections={sections}
+                    keyExtractor={(item, idx) => item.id + idx}
+                    renderItem={renderItem}
+                    renderSectionHeader={({ section }) => (
+                        <TouchableOpacity 
+                            style={[
+                                styles.sectionHeader, 
+                                { 
+                                    backgroundColor: theme.surface, 
+                                    borderColor: theme.border
+                                }
+                            ]} 
+                            onPress={() => toggleSection(section.title)}
+                            activeOpacity={0.7}
+                        >
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                                <View style={[styles.iconContainer, { backgroundColor: theme.primary + '15' }]}>
+                                    <Ionicons name="calendar" size={16} color={theme.primary} />
+                                </View>
+                                <Text style={[styles.sectionTitle, { color: theme.text }]}>{section.title}</Text>
                             </View>
-                            <Ionicons 
-                                name={section.isCollapsed ? "chevron-down" : "chevron-up"} 
-                                size={20} 
-                                color={theme.muted} 
-                            />
-                        </View>
-                    </TouchableOpacity>
-                )}
-                contentContainerStyle={data.length === 0 && !isInitialLoading ? { flexGrow: 1, justifyContent: 'center' } : [styles.list, { paddingBottom: insets.bottom + 20 }]}
-                onEndReached={onLoadMore}
-                onEndReachedThreshold={0.5}
-                removeClippedSubviews={true}
-                initialNumToRender={20}
-                maxToRenderPerBatch={20}
-                updateCellsBatchingPeriod={50}
-                stickySectionHeadersEnabled={false}
-                refreshControl={
-                    <RefreshControl 
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        colors={[theme.primary]}
-                        tintColor={theme.primary}
-                    />
-                }
-                ListFooterComponent={() => isFetchingMore ? <View style={{ padding: 20 }}><ActivityIndicator color={theme.primary} /></View> : null}
-                ListEmptyComponent={
-                    !isInitialLoading ? (
+                            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12 }}>
+                                <View style={[styles.countBadge, { backgroundColor: theme.primary + '15' }]}>
+                                    <Text style={[styles.countText, { color: theme.primary }]}>{section.originalCount}</Text>
+                                </View>
+                                <Ionicons 
+                                    name={section.isCollapsed ? "chevron-down" : "chevron-up"} 
+                                    size={20} 
+                                    color={theme.muted} 
+                                />
+                            </View>
+                        </TouchableOpacity>
+                    )}
+                    contentContainerStyle={data.length === 0 ? { flexGrow: 1, justifyContent: 'center' } : [styles.list, { paddingBottom: insets.bottom + 20 }]}
+                    onEndReached={onLoadMore}
+                    onEndReachedThreshold={0.5}
+                    removeClippedSubviews={true}
+                    initialNumToRender={20}
+                    maxToRenderPerBatch={20}
+                    updateCellsBatchingPeriod={50}
+                    stickySectionHeadersEnabled={false}
+                    onScrollToIndexFailed={(info) => {
+                        const wait = new Promise(resolve => setTimeout(resolve, 500));
+                        wait.then(() => {
+                            try {
+                                sectionListRef.current?.scrollToLocation({
+                                    index: info.index,
+                                    animated: true,
+                                    itemIndex: 0,
+                                    viewPosition: 0,
+                                    viewOffset: 0
+                                });
+                            } catch (e) {}
+                        });
+                    }}
+                    refreshControl={
+                        <RefreshControl 
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            colors={[theme.primary]}
+                            tintColor={theme.primary}
+                        />
+                    }
+                    ListFooterComponent={() => isFetchingMore ? <View style={{ padding: 20 }}><ActivityIndicator color={theme.primary} /></View> : null}
+                    ListEmptyComponent={
                         <View style={styles.empty}>
                             <LottieView source={require('@/assets/json/NoTransactionHistory.json')} autoPlay loop style={{ width: 250, height: 250 }} />
                             <Text style={{ color: theme.muted, fontSize: 18, fontWeight: '800' }}>{emptyText}</Text>
                         </View>
-                    ) : null
-                }
-                showsVerticalScrollIndicator={false}
-            />
+                    }
+                    showsVerticalScrollIndicator={false}
+                />
+            )}
         </View>
     );
 };
@@ -217,6 +295,7 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
     },
     sectionTitle: { fontSize: 16, fontWeight: '800' },
+    iconContainer: { padding: 6, borderRadius: 10 },
     countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
     countText: { fontSize: 13, fontWeight: '800' }
 });

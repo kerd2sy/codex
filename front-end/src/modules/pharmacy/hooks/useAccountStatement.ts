@@ -10,9 +10,10 @@ export function useAccountStatement(selectedPeriod: number) {
   const [statement, setStatement] = useState<any[]>([]);
   const [balance, setBalance] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFetching, setIsFetching] = useState(false);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [pharmacyName, setPharmacyName] = useState("صيدليتك");
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
-  const isFetchingRef = useRef(false);
 
   const loadCachedData = async (pharmId: string) => {
     try {
@@ -25,7 +26,6 @@ export function useAccountStatement(selectedPeriod: number) {
         if (cachedBal) setBalance(cachedBal);
         if (cachedSync) setLastUpdated(cachedSync);
         
-        // Populate central memory cache
         cacheManager.setStatement(pharmId, { data: cachedStmt, balance: cachedBal, sync: cachedSync, pName: pharmacyName }, selectedPeriod);
         setLoading(false);
         return cachedStmt;
@@ -43,6 +43,7 @@ export function useAccountStatement(selectedPeriod: number) {
         return;
       }
 
+      setIsFetching(true);
       let pName = await AsyncStorage.getItem('@active_pharmacy_name') || "صيدليتك";
       
       const userStr = await AsyncStorage.getItem('user');
@@ -55,7 +56,6 @@ export function useAccountStatement(selectedPeriod: number) {
       }
       setPharmacyName(pName);
 
-      // FORCE Load cache BEFORE fetch starts to ensure state is hydrated
       const existing = await loadCachedData(activePharmId);
       
       if (!isBackground && (!existing || existing.length === 0)) {
@@ -74,21 +74,17 @@ export function useAccountStatement(selectedPeriod: number) {
       setStatement(stmtData);
       setBalance(balData);
       
-      // Fallback: If pName was generic, try to extract from statement data
       let finalName = pName;
       if ((!finalName || finalName === "صيدليتك") && stmtData.length > 0) {
           finalName = stmtData[0].pharmacy_name || "صيدليتك";
           setPharmacyName(finalName);
       }
 
-      // Persist to cache
       const now = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
       setLastUpdated(now);
       
-      // Update Central Namespaced Memory Cache
       cacheManager.setStatement(activePharmId, { data: stmtData, balance: balData, sync: now, pName: finalName }, selectedPeriod);
       
-      // Persist to Vault
       await PharmacyVault.set(activePharmId, 'statement', `data_p${selectedPeriod}`, stmtData);
       await PharmacyVault.set(activePharmId, 'statement', 'balance', balData);
       await PharmacyVault.set(activePharmId, 'sync', `statement_p${selectedPeriod}`, now);
@@ -97,29 +93,29 @@ export function useAccountStatement(selectedPeriod: number) {
       console.error("useAccountStatement: fetchAllDataWithId failed", error);
     } finally {
       if (!isBackground) setLoading(false);
+      setIsFetching(false);
     }
-  }, [selectedPeriod]); // Removed statement.length to break loop
+  }, [selectedPeriod]);
 
   const fetchAllData = useCallback(async (isBackground = false) => {
-    if (isFetchingRef.current) return;
+    if (isFetching) return;
 
     try {
-      isFetchingRef.current = true;
+      setIsFetching(true);
       const activePharmId = await AsyncStorage.getItem('@active_pharmacy_id');
       
       if (!activePharmId || activePharmId === '0') {
         setLoading(false);
-        isFetchingRef.current = false;
+        setIsFetching(false);
         return;
       }
 
       await fetchAllDataWithId(activePharmId, isBackground);
     } catch (error) {
       console.error("useAccountStatement: fetchAllData failed", error);
-    } finally {
-      isFetchingRef.current = false;
+      setIsFetching(false);
     }
-  }, [fetchAllDataWithId]);
+  }, [fetchAllDataWithId, isFetching]);
 
   useEffect(() => {
     let isMounted = true;
@@ -135,7 +131,6 @@ export function useAccountStatement(selectedPeriod: number) {
             return;
         }
 
-        // SYNC Fix: Prevent ghostly data from other pharmacies/periods
         const mc = cacheManager.getStatement(pharmId, selectedPeriod);
         const savedName = await AsyncStorage.getItem('@active_pharmacy_name');
         
@@ -146,7 +141,6 @@ export function useAccountStatement(selectedPeriod: number) {
             setLastUpdated(mc.sync);
             setLoading(false);
         } else {
-            // Check vault immediately before setting loading
             const existing = await loadCachedData(pharmId);
             if (!existing) {
                 setStatement([]);
@@ -156,7 +150,7 @@ export function useAccountStatement(selectedPeriod: number) {
             }
         }
         
-        fetchAllDataWithId(pharmId, true); // Always fetch in background
+        fetchAllDataWithId(pharmId, true);
     };
 
     resolveAndInit();
@@ -178,12 +172,15 @@ export function useAccountStatement(selectedPeriod: number) {
     balance,
     pharmacyName,
     loading,
-    refreshing: loading && isFetchingRef.current, // Approximate if no explicit state
+    isFetching,
+    refreshing: isPullRefreshing,
     lastUpdated,
     refresh: async () => { 
+        setIsPullRefreshing(true);
         const task = fetchAllData();
         const timeout = new Promise(res => setTimeout(res, 5000));
         await Promise.race([task, timeout]);
+        setIsPullRefreshing(false);
     }
   };
 }

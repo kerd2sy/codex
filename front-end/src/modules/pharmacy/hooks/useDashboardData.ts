@@ -147,16 +147,27 @@ export function useDashboardData() {
         const savedId = await AsyncStorage.getItem('@active_pharmacy_id');
         const active = pharmacies.find((p: Pharmacy) => p.id.toString() === savedId) || pharmacies[0];
         
+        const pharmacyName = active.name || active.username || `صيدلية ${active.id}`;
+        
         setSelectedPharmacy({
           id: active.id.toString(),
-          name: active.username,
+          name: pharmacyName,
           kind: active.kind || 4,
           tier: active.tier || 1
         });
 
         // Always ensure persistent storage is updated when we sync active pharmacy
         await AsyncStorage.setItem('@active_pharmacy_id', active.id.toString());
-        await AsyncStorage.setItem('@active_pharmacy_name', active.username);
+        await AsyncStorage.setItem('@active_pharmacy_name', pharmacyName);
+
+        // Silent prefetch for all pharmacies so they load instantly when switched
+        pharmacies.forEach((p: Pharmacy) => {
+            const pId = p.id.toString();
+            if (pId !== '0') {
+                const BackgroundSyncManager = require('../utils/BackgroundSyncManager').BackgroundSyncManager;
+                BackgroundSyncManager.prefetchFirstPage(pId, 'purchases', '/api/v1/purchases/my-purchases');
+            }
+        });
       };
       syncActive();
     }
@@ -166,8 +177,10 @@ export function useDashboardData() {
   useEffect(() => {
     if (selectedPharmacy.id !== '0') {
         AsyncStorage.setItem('@active_pharmacy_id', selectedPharmacy.id);
-        AsyncStorage.setItem('@active_pharmacy_name', selectedPharmacy.name);
-        store.setActivePharmacy(selectedPharmacy.id, selectedPharmacy.name);
+        if (selectedPharmacy.name) {
+            AsyncStorage.setItem('@active_pharmacy_name', selectedPharmacy.name);
+        }
+        store.setActivePharmacy(selectedPharmacy.id, selectedPharmacy.name || '');
     }
   }, [selectedPharmacy.id, selectedPharmacy.name, store.setActivePharmacy]);
 
@@ -274,6 +287,10 @@ export function useDashboardData() {
         setBalance(cachedMem.balance);
         setRecentProducts(cachedMem.products);
         setLastUpdated(cachedMem.lastUpdated);
+      } else {
+        setBalance(null);
+        setRecentProducts([]);
+        setLastUpdated(null);
       }
       
       // Clear Global Store to prevent stale transactions from other pharmacies

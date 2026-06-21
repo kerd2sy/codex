@@ -10,3 +10,4 @@ export * from './UpdateBanner';
 export * from './BaseScreen';
 export * from './FinancialListTemplate';
 export * from './InvoiceDetailsTemplate';
+export * from './AddPharmacyTourOverlay';

@@ -20,7 +20,8 @@ import { useLocationUpdate } from '../../hooks/useLocationUpdate';
 import { 
     BalanceCard, CategoryGrid, RecentProductCard,
     DashboardSearch, PharmacySwitchModal,
-    SmallOrderCard, VerificationBanner, UpdateBanner
+    SmallOrderCard, VerificationBanner, UpdateBanner,
+    AddPharmacyTourOverlay
 } from '../../components';
 import { DashboardHeader } from '@/ui/shared/DashboardHeader';
 import { useOrders } from '../../hooks/useOrders';
@@ -31,6 +32,7 @@ import { StatusModal } from '../../../../ui/shared/StatusModal';
 import { DevelopingModal } from '../../../../ui/shared/DevelopingModal';
 import { Pharmacy } from '@/api/types';
 import { DashboardSkeleton } from '../../../../ui/core/skeletons/DashboardSkeleton';
+import { AppRatingModal } from '@/ui/shared/AppRatingModal';
 
 // Using @/assets alias
 const CATEGORIES = [
@@ -87,6 +89,9 @@ export const PharmacyDashboard = () => {
         (updatedUser: any) => setCurrentUser(updatedUser)
     );
 
+    // Module-level variable to keep track of session state
+    // This will reset when the app is fully restarted
+    
     // Local UI State
     const [locationPromptStep, setLocationPromptStep] = useState(0); 
     const [scannerVisible, setScannerVisible] = useState(false);
@@ -95,6 +100,9 @@ export const PharmacyDashboard = () => {
     const [verificationAlert, setVerificationAlert] = useState({ visible: false, title: '', message: '' });
     const [isDevelopingModalVisible, setDevelopingModalVisible] = useState(false);
     const [isAccountModalVisible, setAccountModalVisible] = useState(false);
+    const [isTourVisible, setIsTourVisible] = useState(false);
+    const [tourType, setTourType] = useState<'first_pharmacy' | 'multi_pharmacy'>('first_pharmacy');
+    const [isRatingModalVisible, setIsRatingModalVisible] = useState(false);
     
     const scrollY = useRef(new Animated.Value(0)).current;
     const locationTimeoutRef = useRef<any>(null);
@@ -122,16 +130,87 @@ export const PharmacyDashboard = () => {
         };
     }, [selectedPharmacy.id, currentUser]);
 
+    // Tour Logic
+    useEffect(() => {
+        if (!isInitializing && currentUser) {
+            const checkTour = async () => {
+                try {
+                    if (selectedPharmacy.id === '0') {
+                        // Use session variable from global scope
+                        const hasPharmacies = currentUser.pharmacies && currentUser.pharmacies.length > 0;
+                        if (!hasPharmacies && !(global as any).hasSeenFirstPharmacyTourThisSession) {
+                            setTourType('first_pharmacy');
+                            setIsTourVisible(true);
+                        }
+                    } else {
+                        const countStr = await AsyncStorage.getItem(`@multi_pharmacy_tour_count_${currentUser.id}`);
+                        const count = parseInt(countStr || '0', 10);
+                        if (count < 5) {
+                            setTourType('multi_pharmacy');
+                            setIsTourVisible(true);
+                            await AsyncStorage.setItem(`@multi_pharmacy_tour_count_${currentUser.id}`, (count + 1).toString());
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error checking tour state:', e);
+                }
+            };
+            checkTour();
+        }
+    }, [isInitializing, currentUser, selectedPharmacy.id]);
+
+    const handleCloseTour = async () => {
+        if (tourType === 'first_pharmacy' && currentUser) {
+            (global as any).hasSeenFirstPharmacyTourThisSession = true;
+        }
+        setIsTourVisible(false);
+    };
+
+    // Rating Prompt Logic
+    useEffect(() => {
+        const checkRatingPrompt = async () => {
+            try {
+                const hasRated = await AsyncStorage.getItem('has_rated_app');
+                if (hasRated === 'true') return;
+
+                const nextPromptStr = await AsyncStorage.getItem('next_rating_prompt_date');
+                const now = new Date();
+                
+                if (nextPromptStr) {
+                    const nextPromptDate = new Date(nextPromptStr);
+                    if (now >= nextPromptDate) {
+                        setIsRatingModalVisible(true);
+                    }
+                } else {
+                    // Show it immediately the first time (or you could delay it)
+                    setIsRatingModalVisible(true);
+                }
+            } catch (e) {
+                console.log('Error checking rating prompt:', e);
+            }
+        };
+        
+        if (currentUser && !isInitializing) {
+            setTimeout(checkRatingPrompt, 3000); // 3 seconds delay so it doesn't block UI rendering
+        }
+    }, [currentUser, isInitializing]);
+
     const handlePharmacySwitch = async (pharmacy: Pharmacy) => {
-        setSelectedPharmacy({ 
-            id: pharmacy.id.toString(), 
-            name: pharmacy.username,
-            kind: pharmacy.kind || 4,
-            tier: pharmacy.tier || 1
-        });
-        await AsyncStorage.setItem('@active_pharmacy_id', pharmacy.id.toString());
-        await AsyncStorage.setItem('@active_pharmacy_name', pharmacy.username);
         setAccountModalVisible(false);
+        
+        setTimeout(async () => {
+            setSelectedPharmacy({ 
+                id: pharmacy.id.toString(), 
+                name: pharmacy.username || pharmacy.name || '',
+                kind: pharmacy.kind || 4,
+                tier: pharmacy.tier || 1
+            });
+            await AsyncStorage.setItem('@active_pharmacy_id', pharmacy.id.toString());
+            const nameToSave = pharmacy.username || pharmacy.name;
+            if (nameToSave) {
+                await AsyncStorage.setItem('@active_pharmacy_name', nameToSave);
+            }
+        }, 300);
     };
 
     const handleSearch = () => {
@@ -166,7 +245,7 @@ export const PharmacyDashboard = () => {
     }
 
     const currentHour = new Date().getHours();
-    const isWorkingHours = currentHour >= 9 && currentHour <= 23; // 9:00 AM to 11:59 PM (12 AM)
+    const isWorkingHours = currentHour >= 9 || currentHour < 5; // 9:00 AM to 4:59 AM
 
     return (
         <View style={[styles.container, { backgroundColor: theme.background }]}>
@@ -373,7 +452,17 @@ export const PharmacyDashboard = () => {
                 message="جميع ميزات تصفح الأصناف ستكون متاحة قريباً."
             />
 
+            <AddPharmacyTourOverlay 
+                visible={isTourVisible} 
+                onClose={handleCloseTour} 
+                theme={theme} 
+                tourType={tourType}
+            />
 
+            <AppRatingModal 
+                visible={isRatingModalVisible} 
+                onClose={() => setIsRatingModalVisible(false)} 
+            />
         </View>
     );
 };
